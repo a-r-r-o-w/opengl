@@ -1,0 +1,11 @@
+# binaries
+build/
+*.out
+*.s
+*.exe
+*.so
+*.a
+
+# vscode
+.vscode/
+
