@@ -14,8 +14,8 @@ This program renders a simple triangle using OpenGL.
 For Windows and Mac users, you must download/compile GLFW and name the library `libglfw.so` and place it in a directory where CMake can find it. Linux users can run `apt update && apt install libglfw3-dev` to install all requirements (tested on Kali, Ubuntu, Arch).
 
 ```
-git clone https://github.com/a-r-r-o-w/opengl-projects
-cd hello-triangle
+git clone https://github.com/a-r-r-o-w/opengl
+cd opengl/hello-triangle
 mkdir build
 cd build
 cmake ..
