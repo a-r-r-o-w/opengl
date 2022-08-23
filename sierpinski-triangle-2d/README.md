@@ -34,7 +34,7 @@ mkdir build
 cd build
 cmake ..
 make
-./sierpinksi-triangle-2d
+./sierpinski-triangle-2d
 ```
 
 If everything worked well, you have a Sierpinski Triangle!
