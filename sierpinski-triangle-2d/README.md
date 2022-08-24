@@ -39,6 +39,8 @@ make
 
 If everything worked well, you have a Sierpinski Triangle!
 
+https://user-images.githubusercontent.com/72266394/186477427-efe5c6eb-a16d-4291-9da4-66ea1837c479.mp4
+
 ![sierpinski-simple.png](./images/sierpinski-simple.png)
 
 ![sierpinski-gradual.png](./images/sierpinski-gradual.png)
