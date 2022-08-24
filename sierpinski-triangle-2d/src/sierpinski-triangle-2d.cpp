@@ -1,5 +1,6 @@
 #include "GL/glut.h"
 #include "glm/vec3.hpp"
+#include "glm/glm.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -17,6 +18,20 @@ namespace globals {
     { 0.0f, +1.0f, 0.0f}
   };
 
+  glm::vec3 vertex_colors[3] = {
+    {1, 0, 0},
+    {0, 1, 0},
+    {0, 0, 1}
+  };
+
+  glm::vec3 vertex_color_deltas[3] = {
+    {0.001f * 4, 0.004f * 4, 0.002f * 4},
+    {0.002f * 4, 0.005f * 4, 0.010f * 4},
+    {0.015f * 4, 0.004f * 4, 0.001f * 4}
+  };
+
+  unsigned int animation_tick = 0;
+
   std::random_device device;
   std::mt19937 rng (device());
   std::uniform_real_distribution <> real_distribution (-1.0f, 1.0f);
@@ -26,12 +41,14 @@ namespace globals {
 }
 
 void display ();
+void timer (int);
 void generate_points ();
 glm::vec3 midway_point (const glm::vec3&, const glm::vec3&);
 glm::vec3 generate_point_inside_triangle ();
 void draw_simple ();
 void draw_random_colored ();
 void draw_gradual_change ();
+void draw_animated ();
 
 int main (int argc, char** argv) {
   generate_points();
@@ -43,6 +60,7 @@ int main (int argc, char** argv) {
   glutInitDisplayMode(GLUT_RGB);
 
   glutCreateWindow("Sierpinski Triangle");
+  glutTimerFunc(0, timer, 0);
   glutDisplayFunc(display);
   glutMainLoop();
 
@@ -50,16 +68,20 @@ int main (int argc, char** argv) {
 }
 
 void display () {
-  using namespace globals;
-  
-  glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+  glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   // draw_simple();
   // draw_random_colored();
-  draw_gradual_change();
+  // draw_gradual_change();
+  draw_animated();
 
   glutSwapBuffers();
+}
+
+void timer (int value) {
+  glutPostRedisplay();
+  glutTimerFunc(16, timer, 0);
 }
 
 void generate_points () {
@@ -171,4 +193,41 @@ void draw_gradual_change () {
   }
 
   glEnd();
+}
+
+void draw_animated () {
+  using namespace globals;
+
+  glBegin(GL_POINTS);
+
+  for (int i = 0; i < total_points; ++i) {
+    float d0 = glm::distance(points[i], vertices[0]);
+    float d1 = glm::distance(points[i], vertices[1]);
+    float d2 = glm::distance(points[i], vertices[2]);
+
+    // denominator has been approximated. actual value should be 2 * (1 + sqrt(5))
+    float r = d0 * (vertex_colors[0].x + vertex_colors[1].x + vertex_colors[2].x) / 6;
+    float g = d1 * (vertex_colors[0].y + vertex_colors[1].y + vertex_colors[2].y) / 6;
+    float b = d2 * (vertex_colors[0].z + vertex_colors[1].z + vertex_colors[2].z) / 6;
+
+    glColor3f(r, g, b);
+    glVertex3f(points[i].x, points[i].y, points[i].z);
+  }
+
+  glEnd();
+
+  ++animation_tick;
+
+  if (animation_tick == 2) {
+    animation_tick = 0;
+
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        if ((vertex_colors[i][j] + vertex_color_deltas[i][j] <= 0.0f) or
+            (vertex_colors[i][j] + vertex_color_deltas[i][j] >= 1.0f))
+          vertex_color_deltas[i][j] = -vertex_color_deltas[i][j];
+      }
+      vertex_colors[i] += vertex_color_deltas[i];
+    }
+  }
 }
