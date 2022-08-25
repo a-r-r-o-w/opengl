@@ -38,3 +38,5 @@ make
 ```
 
 If everything worked well, you have a Sierpinski Triangle in 3D!
+
+https://user-images.githubusercontent.com/72266394/186707043-866f15f9-9666-4910-a791-54545455e778.mp4
