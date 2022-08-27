@@ -21,7 +21,7 @@ This program requires the following libraries/tools:
 - [GLM](https://github.com/g-truc/glm)
 - [CMake](https://cmake.org/)
 
-Installation instructions for Windows/Mac can be found online. Linux users can install all relevant requirements using `sudo apt-get freeglut3 freeglut3-dev libglm-dev cmake`.
+Installation instructions for Windows/Mac can be found online. Linux users can install all relevant requirements using `sudo apt install freeglut3 freeglut3-dev libglm-dev cmake`.
 
 ### Build
 
