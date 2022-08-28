@@ -29,3 +29,9 @@ cmake ..
 make
 ./convex-hull-2d
 ```
+
+### Visualization
+
+**Graham Scan**
+
+https://user-images.githubusercontent.com/72266394/187084087-8ddd964d-d2c2-4cba-9763-fe99986a93a2.mp4
