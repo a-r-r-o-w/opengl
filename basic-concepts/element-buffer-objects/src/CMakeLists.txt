@@ -1,7 +1,7 @@
 add_executable(
   element-buffer-object
     element-buffer-object.cpp
-    ../deps/glad/glad.c
+    ../../../.deps/glad/glad.c
 )
 
 target_link_libraries(
