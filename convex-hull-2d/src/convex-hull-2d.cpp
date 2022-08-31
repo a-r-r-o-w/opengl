@@ -10,6 +10,16 @@
 #include <stack>
 #include <thread>
 
+struct point {
+  int x;
+  int y;
+  int z;
+
+  point (int x = 0, int y = 0, int z = 0)
+    : x (x), y (y), z (z)
+  { }
+};
+
 namespace globals {
   int screen_width = 720;
   int screen_height = 720;
@@ -18,7 +28,7 @@ namespace globals {
   int grid_size = 10;
   int animation_delay = 200;
 
-  std::vector <glm::vec3> points;
+  std::vector <point> points;
   
   glm::vec3 clear_color (0.1f, 0.1f, 0.1f);
   glm::vec3 point_color (1.0f, 0.0f, 0.0f);
@@ -28,7 +38,8 @@ namespace globals {
 
   std::random_device device;
   std::mt19937 rng (device());
-  std::uniform_int_distribution <> distribution (0, 720);
+  std::uniform_int_distribution <> width_distribution (0 + grid_size, screen_width - grid_size);
+  std::uniform_int_distribution <> height_distribution (0 + grid_size, screen_height - grid_size);
 }
 
 // function declarations
@@ -40,13 +51,13 @@ void generate_points ();
 void display ();
 void display_grid ();
 void display_points ();
-void display_graham_scan_hull (const std::vector <std::pair <glm::vec3, int>>&);
-void display_graham_scan_hull_partial (const std::vector <std::pair <glm::vec3, int>>&, std::vector <bool>&);
-void display_graham_scan_hull_creation (const std::vector <std::pair <glm::vec3, int>>&);
+void display_graham_scan_hull (const std::vector <std::pair <point, int>>&);
+void display_graham_scan_hull_partial (const std::vector <std::pair <point, int>>&, std::vector <bool>&);
+void display_graham_scan_hull_creation (const std::vector <std::pair <point, int>>&);
 
-int orientation (const glm::vec3&, const glm::vec3&, const glm::vec3&);
+int orientation (const point&, const point&, const point&);
 
-std::vector <std::pair <glm::vec3, int>> graham_scan_convex_hull (bool = false);
+std::vector <std::pair <point, int>> graham_scan_convex_hull ();
 
 int main (int argc, char** argv) {
   // generate random set of points
@@ -67,15 +78,17 @@ int main (int argc, char** argv) {
   glEnable(GL_POINT_SMOOTH);
   glPointSize(8.0f);
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(3000));
   glutMainLoop();
 
   return 0;
 }
 
 void handle_resize (int width, int height) {
-  globals::screen_width = width;
-  globals::screen_height = height;
+  using namespace globals;
+
+  screen_width = width;
+  screen_height = height;
+
   glViewport(0, 0, width, height);
   glutPostRedisplay();
 }
@@ -83,12 +96,10 @@ void handle_resize (int width, int height) {
 void generate_points () {
   using namespace globals;
 
-  auto generate_point = [] () {
-    glm::vec3 point;
-    point.x = (double)distribution(rng) / ((double)screen_width / 2) - 1.0;
-    point.y = (double)distribution(rng) / ((double)screen_height / 2) - 1.0;
-    point.z = 0.0f;
-    return point;
+  auto generate_point = [&] () {
+    int x = width_distribution(rng) / grid_size * grid_size;
+    int y = height_distribution(rng) / grid_size * grid_size;
+    return point(x, y, 0);
   };
 
   for (int i = 0; i < total_points; ++i)
@@ -107,11 +118,15 @@ void display_grid () {
 
   glBegin(GL_LINES);
   glColor3f(grid_color.x, grid_color.y, grid_color.z);
+  
+  double width_dr = (double)screen_width / 2;
+  double height_dr = (double)screen_height / 2;
 
   for (int i = 0; i < screen_height; i += grid_size) {
     for (int j = 0; j < screen_width; j += grid_size) {
-      double x = (double)i / ((double)screen_height / 2) - 1.0;
-      double y = (double)i / ((double)screen_width / 2) - 1.0;
+      double x = (double)j / width_dr - 1.0;
+      double y = (double)i / height_dr - 1.0;
+      
       glVertex3f(x, -1, 0.0f);
       glVertex3f(x, +1, 0.0f);
       glVertex3f(-1, y, 0.0f);
@@ -125,16 +140,23 @@ void display_grid () {
 void display_points () {
   using namespace globals;
 
+  double width_dr = (double)screen_width / 2;
+  double height_dr = (double)screen_height / 2;
+
   glBegin(GL_POINTS);
   glColor3f(point_color.x, point_color.y, point_color.z);
 
-  for (auto &point: points)
-    glVertex3f(point.x, point.y, point.z);
+  for (auto &point: points) {
+    glm::vec3 p (point.x, point.y, point.z);
+    p.x = p.x / width_dr - 1.0f;
+    p.y = p.y / height_dr - 1.0f;
+    glVertex3f(p.x, p.y, p.z);
+  }
 
   glEnd();
 }
 
-void display_graham_scan_hull (const std::vector <std::pair <glm::vec3, int>> &hull) {
+void display_graham_scan_hull (const std::vector <std::pair <point, int>> &hull) {
   using namespace globals;
 
   glClearColor(clear_color.x, clear_color.y, clear_color.z, 1.0f);
@@ -144,6 +166,8 @@ void display_graham_scan_hull (const std::vector <std::pair <glm::vec3, int>> &h
   display_points();
 
   int n = hull.size();
+  double width_dr = (double)screen_width / 2;
+  double height_dr = (double)screen_height / 2;
 
   glBegin(GL_LINES);
   
@@ -152,9 +176,16 @@ void display_graham_scan_hull (const std::vector <std::pair <glm::vec3, int>> &h
   for (int i = 0; i < n; ++i) {
     auto &p1 = hull[i].first;
     auto &p2 = hull[(i + 1) % n].first;
+    glm::vec3 n1 (p1.x, p1.y, p1.z);
+    glm::vec3 n2 (p2.x, p2.y, p2.z);
 
-    glVertex3f(p1.x, p1.y, p1.z);
-    glVertex3f(p2.x, p2.y, p2.z);
+    n1.x = n1.x / width_dr - 1.0;
+    n2.x = n2.x / width_dr - 1.0;
+    n1.y = n1.y / height_dr - 1.0;
+    n2.y = n2.y / height_dr - 1.0;
+
+    glVertex3f(n1.x, n1.y, n1.z);
+    glVertex3f(n2.x, n2.y, n2.z);
   }
 
   glEnd();
@@ -162,7 +193,7 @@ void display_graham_scan_hull (const std::vector <std::pair <glm::vec3, int>> &h
   glutSwapBuffers();
 }
 
-void display_graham_scan_hull_partial (const std::vector <std::pair <glm::vec3, int>> &hull, std::vector <bool> &status) {
+void display_graham_scan_hull_partial (const std::vector <std::pair <point, int>> &hull, std::vector <bool> &status) {
   using namespace globals;
 
   glClearColor(clear_color.x, clear_color.y, clear_color.z, 1.0f);
@@ -172,10 +203,19 @@ void display_graham_scan_hull_partial (const std::vector <std::pair <glm::vec3, 
   display_points();
 
   int n = hull.size();
+  double width_dr = (double)screen_width / 2;
+  double height_dr = (double)screen_height / 2;
 
   for (int j = 1; j < n; ++j) {
     auto &[p1, _] = hull[j - 1];
     auto &[p2, index] = hull[j];
+    glm::vec3 n1 (p1.x, p1.y, p1.z);
+    glm::vec3 n2 (p2.x, p2.y, p2.z);
+
+    n1.x = n1.x / width_dr - 1.0;
+    n2.x = n2.x / width_dr - 1.0;
+    n1.y = n1.y / height_dr - 1.0;
+    n2.y = n2.y / height_dr - 1.0;
 
     glBegin(GL_LINES);
 
@@ -184,21 +224,31 @@ void display_graham_scan_hull_partial (const std::vector <std::pair <glm::vec3, 
     else
       glColor3f(invalid_hull_color.x, invalid_hull_color.y, invalid_hull_color.z);
     
-    glVertex3f(p1.x, p1.y, p1.z);
-    glVertex3f(p2.x, p2.y, p2.z);
+    glVertex3f(n1.x, n1.y, n1.z);
+    glVertex3f(n2.x, n2.y, n2.z);
     
     glEnd();
   }
 
   if (n > 2) {
+    auto &p1 = hull.front().first;
+    auto &p2 = hull.back().first;
+    glm::vec3 n1 (p1.x, p1.y, p1.z);
+    glm::vec3 n2 (p2.x, p2.y, p2.z);
+
+    n1.x = n1.x / width_dr - 1.0;
+    n2.x = n2.x / width_dr - 1.0;
+    n1.y = n1.y / height_dr - 1.0;
+    n2.y = n2.y / height_dr - 1.0;
+
     glPushAttrib(GL_ENABLE_BIT);
     glLineStipple(5, 0xAAAA);
     glEnable(GL_LINE_STIPPLE);
     glBegin(GL_LINES);
-    
+
     glColor3f(invalid_hull_color.x, invalid_hull_color.y, invalid_hull_color.z);
-    glVertex3f(hull.front().first.x, hull.front().first.y, hull.front().first.z);
-    glVertex3f(hull.back().first.x, hull.back().first.y, hull.back().first.z);
+    glVertex3f(n1.x, n1.y, n1.z);
+    glVertex3f(n2.x, n2.y, n2.z);
     
     glEnd();
     glPopAttrib();
@@ -208,10 +258,10 @@ void display_graham_scan_hull_partial (const std::vector <std::pair <glm::vec3, 
   glutSwapBuffers();
 }
 
-void display_graham_scan_hull_creation (const std::vector <std::pair <glm::vec3, int>> &hull) {
+void display_graham_scan_hull_creation (const std::vector <std::pair <point, int>> &hull) {
   using namespace globals;
 
-  std::vector <std::pair <glm::vec3, int>> current_hull;
+  std::vector <std::pair <point, int>> current_hull;
   std::vector <bool> status (total_points);
 
   for (auto &[p, index]: hull)
@@ -230,9 +280,8 @@ void display_graham_scan_hull_creation (const std::vector <std::pair <glm::vec3,
   display_graham_scan_hull(hull);
 }
 
-int orientation (const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
-  double value = a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y);
-
+int orientation (const point& a, const point& b, const point& c) {
+  int value = a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y);
   if (value < 0)
     return -1; // clockwise
   else if (value > 0)
@@ -240,7 +289,7 @@ int orientation (const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
   return 0; // collinear
 }
 
-std::vector <std::pair <glm::vec3, int>> graham_scan_convex_hull (bool include_collinear) {
+std::vector <std::pair <point, int>> graham_scan_convex_hull () {
   using namespace globals;
 
   auto p0 = *std::min_element(points.begin(), points.end(), [] (auto &l, auto &r) {
@@ -259,27 +308,14 @@ std::vector <std::pair <glm::vec3, int>> graham_scan_convex_hull (bool include_c
     return o < 0;
   });
 
-  if (include_collinear) {
-    int i = total_points - 1;
-    while (i >= 0 and orientation(p0, points[i], points.back()) == 0)
-      --i;
-    std::reverse(points.begin() + i + 1, points.end());
-  }
-
-  std::vector <std::pair <glm::vec3, int>> stack;
+  std::vector <std::pair <point, int>> stack;
 
   for (int i = 0; i < total_points; ++i) {
     int k = stack.size();
 
-    while (k > 1) {
-      int o = orientation(stack[k - 2].first, stack[k - 1].first, points[i]);
-
-      if (!(o < 0 or (include_collinear and o == 0))) {
-        stack.pop_back();
-        --k;
-      }
-      else
-        break;
+    while (k > 1 and orientation(stack[k - 2].first, stack[k - 1].first, points[i]) >= 0) {
+      stack.pop_back();
+      --k;
     }
 
     stack.push_back({points[i], i});
