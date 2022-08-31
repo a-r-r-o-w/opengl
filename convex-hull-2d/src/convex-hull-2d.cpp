@@ -24,7 +24,7 @@ namespace globals {
   int screen_width = 720;
   int screen_height = 720;
 
-  int total_points = 20;
+  int total_points = 50;
   int grid_size = 10;
   int animation_delay = 200;
 
@@ -51,13 +51,20 @@ void generate_points ();
 void display ();
 void display_grid ();
 void display_points ();
-void display_graham_scan_hull (const std::vector <std::pair <point, int>>&);
+void display_hull (const std::vector <std::pair <point, int>>&);
 void display_graham_scan_hull_partial (const std::vector <std::pair <point, int>>&, std::vector <bool>&);
 void display_graham_scan_hull_creation (const std::vector <std::pair <point, int>>&);
+void display_andrew_monotone_chain_hull_partial (
+  const std::vector <std::pair <point, int>>&,
+  const std::vector <std::pair <point, int>>&,
+  const std::vector <bool>&
+);
+void display_andrew_monotone_chain_hull_creation ();
 
 int orientation (const point&, const point&, const point&);
 
 std::vector <std::pair <point, int>> graham_scan_convex_hull ();
+std::vector <std::pair <point, int>> andrew_monotone_chain_convex_hull ();
 
 int main (int argc, char** argv) {
   // generate random set of points
@@ -107,10 +114,20 @@ void generate_points () {
 }
 
 void display () {
-  auto hull = graham_scan_convex_hull();
-  
-  // display_graham_scan_hull(hull);
-  display_graham_scan_hull_creation(hull);
+  /* (1) graham scan convex hull visualization */
+  // auto hull = graham_scan_convex_hull();
+  // display_hull(hull);
+
+  /* (2) graham scan convex hull step-by-step creation visualization */
+  // auto hull = graham_scan_convex_hull();
+  // display_graham_scan_hull_creation(hull);
+
+  /* (3) andrew monotone chain convex hull visualization */
+  // auto hull = andrew_monotone_chain_convex_hull();
+  // display_hull(hull);
+
+  /* (4) andrew monotone chain convex hull creation visualization */
+  display_andrew_monotone_chain_hull_creation();
 }
 
 void display_grid () {
@@ -156,7 +173,7 @@ void display_points () {
   glEnd();
 }
 
-void display_graham_scan_hull (const std::vector <std::pair <point, int>> &hull) {
+void display_hull (const std::vector <std::pair <point, int>> &hull) {
   using namespace globals;
 
   glClearColor(clear_color.x, clear_color.y, clear_color.z, 1.0f);
@@ -206,9 +223,9 @@ void display_graham_scan_hull_partial (const std::vector <std::pair <point, int>
   double width_dr = (double)screen_width / 2;
   double height_dr = (double)screen_height / 2;
 
-  for (int j = 1; j < n; ++j) {
-    auto &[p1, _] = hull[j - 1];
-    auto &[p2, index] = hull[j];
+  for (int i = 1; i < n; ++i) {
+    auto &[p1, _] = hull[i - 1];
+    auto &[p2, index] = hull[i];
     glm::vec3 n1 (p1.x, p1.y, p1.z);
     glm::vec3 n2 (p2.x, p2.y, p2.z);
 
@@ -277,7 +294,177 @@ void display_graham_scan_hull_creation (const std::vector <std::pair <point, int
     std::this_thread::sleep_for(std::chrono::milliseconds(animation_delay));
   }
 
-  display_graham_scan_hull(hull);
+  display_hull(hull);
+}
+
+void display_andrew_monotone_chain_hull_partial (
+  const std::vector <std::pair <point, int>>& upper_hull,
+  const std::vector <std::pair <point, int>>& lower_hull,
+  const std::vector <bool>& status
+) {
+  using namespace globals;
+
+  glClearColor(clear_color.x, clear_color.y, clear_color.z, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  display_grid();
+  display_points();
+
+  int upper_size = upper_hull.size();
+  int lower_size = lower_hull.size();
+  double width_dr = (double)screen_width / 2;
+  double height_dr = (double)screen_height / 2;
+
+  for (int i = 1; i < upper_size; ++i) {
+    auto &[p1, _] = upper_hull[i - 1];
+    auto &[p2, index] = upper_hull[i];
+    glm::vec3 n1 (p1.x, p1.y, p1.z);
+    glm::vec3 n2 (p2.x, p2.y, p2.z);
+
+    n1.x = n1.x / width_dr - 1.0;
+    n2.x = n2.x / width_dr - 1.0;
+    n1.y = n1.y / height_dr - 1.0;
+    n2.y = n2.y / height_dr - 1.0;
+
+    glBegin(GL_LINES);
+
+    if (status[index])
+      glColor3f(valid_hull_color.x, valid_hull_color.y, valid_hull_color.z);
+    else
+      glColor3f(invalid_hull_color.x, invalid_hull_color.y, invalid_hull_color.z);
+    
+    glVertex3f(n1.x, n1.y, n1.z);
+    glVertex3f(n2.x, n2.y, n2.z);
+    
+    glEnd();
+  }
+
+  if (upper_size > 2) {
+    auto &p1 = upper_hull.front().first;
+    auto &p2 = upper_hull.back().first;
+    glm::vec3 n1 (p1.x, p1.y, p1.z);
+    glm::vec3 n2 (p2.x, p2.y, p2.z);
+
+    n1.x = n1.x / width_dr - 1.0;
+    n2.x = n2.x / width_dr - 1.0;
+    n1.y = n1.y / height_dr - 1.0;
+    n2.y = n2.y / height_dr - 1.0;
+
+    glPushAttrib(GL_ENABLE_BIT);
+    glLineStipple(5, 0xAAAA);
+    glEnable(GL_LINE_STIPPLE);
+    glBegin(GL_LINES);
+
+    glColor3f(invalid_hull_color.x, invalid_hull_color.y, invalid_hull_color.z);
+    glVertex3f(n1.x, n1.y, n1.z);
+    glVertex3f(n2.x, n2.y, n2.z);
+    
+    glEnd();
+    glPopAttrib();
+  }
+
+  for (int i = 1; i < lower_size; ++i) {
+    auto &[p1, _] = lower_hull[i - 1];
+    auto &[p2, index] = lower_hull[i];
+    glm::vec3 n1 (p1.x, p1.y, p1.z);
+    glm::vec3 n2 (p2.x, p2.y, p2.z);
+
+    n1.x = n1.x / width_dr - 1.0;
+    n2.x = n2.x / width_dr - 1.0;
+    n1.y = n1.y / height_dr - 1.0;
+    n2.y = n2.y / height_dr - 1.0;
+
+    glBegin(GL_LINES);
+
+    if (status[index])
+      glColor3f(valid_hull_color.x, valid_hull_color.y, valid_hull_color.z);
+    else
+      glColor3f(invalid_hull_color.x, invalid_hull_color.y, invalid_hull_color.z);
+    
+    glVertex3f(n1.x, n1.y, n1.z);
+    glVertex3f(n2.x, n2.y, n2.z);
+    
+    glEnd();
+  }
+
+  if (lower_size > 2) {
+    auto &p1 = lower_hull.front().first;
+    auto &p2 = lower_hull.back().first;
+    glm::vec3 n1 (p1.x, p1.y, p1.z);
+    glm::vec3 n2 (p2.x, p2.y, p2.z);
+
+    n1.x = n1.x / width_dr - 1.0;
+    n2.x = n2.x / width_dr - 1.0;
+    n1.y = n1.y / height_dr - 1.0;
+    n2.y = n2.y / height_dr - 1.0;
+
+    glPushAttrib(GL_ENABLE_BIT);
+    glLineStipple(5, 0xAAAA);
+    glEnable(GL_LINE_STIPPLE);
+    glBegin(GL_LINES);
+
+    glColor3f(invalid_hull_color.x, invalid_hull_color.y, invalid_hull_color.z);
+    glVertex3f(n1.x, n1.y, n1.z);
+    glVertex3f(n2.x, n2.y, n2.z);
+    
+    glEnd();
+    glPopAttrib();
+  }
+
+  glFlush();
+  glutSwapBuffers();
+}
+
+void display_andrew_monotone_chain_hull_creation () {
+  using namespace globals;
+
+  std::sort(points.begin(), points.end(), [] (auto &l, auto &r) {
+    return std::make_pair(l.x, l.y) < std::make_pair(r.x, r.y);
+  });
+
+  point p1 = points.front(), p2 = points.back();
+  std::vector <std::pair <point, int>> upper_hull, lower_hull, hull;
+  std::vector <bool> status (total_points, true);
+
+  upper_hull.push_back({p1, 0});
+  lower_hull.push_back({p1, 0});
+
+  for (int i = 1; i < total_points; ++i) {
+    if (i == total_points - 1 or orientation(p1, points[i], p2) < 0) {
+      int k = upper_hull.size();
+
+      while (k > 1 and orientation(upper_hull[k - 2].first, upper_hull[k - 1].first, points[i]) >= 0) {
+        status[upper_hull.back().second] = false;
+        upper_hull.pop_back();
+        --k;
+      }
+      
+      upper_hull.push_back({points[i], i});
+    }
+
+    if (i == total_points - 1 or orientation(p1, points[i], p2) > 0) {
+      int k = lower_hull.size();
+
+      while (k > 1 and orientation(lower_hull[k - 2].first, lower_hull[k - 1].first, points[i]) <= 0) {
+        status[lower_hull.back().second] = false;
+        lower_hull.pop_back();
+        --k;
+      }
+
+      lower_hull.push_back({points[i], i});
+    }
+
+    display_andrew_monotone_chain_hull_partial(upper_hull, lower_hull, status);
+    std::this_thread::sleep_for(std::chrono::milliseconds(animation_delay));
+  }
+
+  for (int i = 0; i < (int)upper_hull.size(); ++i)
+    hull.push_back(upper_hull[i]);
+  
+  for (int i = lower_hull.size() - 2; i >= 0; --i)
+    hull.push_back(lower_hull[i]);
+  
+  display_hull(hull);
 }
 
 int orientation (const point& a, const point& b, const point& c) {
@@ -322,4 +509,50 @@ std::vector <std::pair <point, int>> graham_scan_convex_hull () {
   }
 
   return stack;
+}
+
+std::vector <std::pair <point, int>> andrew_monotone_chain_convex_hull () {
+  using namespace globals;
+
+  std::sort(points.begin(), points.end(), [] (auto &l, auto &r) {
+    return std::make_pair(l.x, l.y) < std::make_pair(r.x, r.y);
+  });
+
+  point p1 = points.front(), p2 = points.back();
+  std::vector <std::pair <point, int>> upper_hull, lower_hull, hull;
+
+  upper_hull.push_back({p1, 0});
+  lower_hull.push_back({p1, 0});
+
+  for (int i = 1; i < total_points; ++i) {
+    if (i == total_points - 1 or orientation(p1, points[i], p2) < 0) {
+      int k = upper_hull.size();
+
+      while (k > 1 and orientation(upper_hull[k - 2].first, upper_hull[k - 1].first, points[i]) >= 0) {
+        upper_hull.pop_back();
+        --k;
+      }
+      
+      upper_hull.push_back({points[i], i});
+    }
+
+    if (i == total_points - 1 or orientation(p1, points[i], p2) > 0) {
+      int k = lower_hull.size();
+
+      while (k > 1 and orientation(lower_hull[k - 2].first, lower_hull[k - 1].first, points[i]) <= 0) {
+        lower_hull.pop_back();
+        --k;
+      }
+
+      lower_hull.push_back({points[i], i});
+    }
+  }
+
+  for (int i = 0; i < (int)upper_hull.size(); ++i)
+    hull.push_back(upper_hull[i]);
+  
+  for (int i = lower_hull.size() - 2; i >= 0; --i)
+    hull.push_back(lower_hull[i]);
+  
+  return hull;
 }
