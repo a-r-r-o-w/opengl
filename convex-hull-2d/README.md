@@ -5,6 +5,7 @@ This program finds the Convex Hull of a set of points and visualizes what the di
 The following algorithms have been implemented (a brief description of how the algorithms work is present towards the bottom of this page):
 
 - Graham Scan
+- Andrew's Monotone Chain
 
 ### Requirements
 
@@ -35,3 +36,7 @@ make
 **Graham Scan**
 
 https://user-images.githubusercontent.com/72266394/187084087-8ddd964d-d2c2-4cba-9763-fe99986a93a2.mp4
+
+**Andrew's Monotone Chain**
+
+https://user-images.githubusercontent.com/72266394/187617100-c005050b-ebf5-451d-b2c9-16a5399ca2a8.mp4
