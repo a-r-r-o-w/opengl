@@ -6,11 +6,12 @@ The program uses the following algorithm:
 
 ```
 1) create a pyramid with 4 arbitrary starting points
-2) assign p as a random point within the pyramid
+2) assign p as a random point (this implementation simply uses one of the vertices of the pyramid)
 3) select a random vertex v of the pyramid
 4) assign q as the midpoint of p and v
 5) draw q
-6) repeat 3-6 for many iterations
+6) assign q to p
+7) repeat 3-7 for many iterations
 ```
 
 ### Requirements

@@ -1,4 +1,4 @@
-#include "GL/glut.h"
+#include "GL/freeglut.h"
 #include "glm/glm.hpp"
 
 #include <algorithm>
@@ -6,6 +6,7 @@
 #include <iostream>
 #include <random>
 
+// global and state variables
 namespace globals {
   const int screen_width = 720;
   const int screen_height = 720;
@@ -55,7 +56,6 @@ void timer (int);
 void display ();
 void generate_points ();
 glm::vec3 midway_point (const glm::vec3&, const glm::vec3&);
-glm::vec3 generate_point_inside_pyramid ();
 void handle_keypress (unsigned char, int, int);
 void draw_simple ();
 void draw_random_colored ();
@@ -72,7 +72,7 @@ int main (int argc, char** argv) {
 
   glutInitWindowSize(globals::screen_width, globals::screen_height);
   glutInitWindowPosition(100, 100);
-  glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH);
+  glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 
   glutCreateWindow("Sierpinski Triangle");
   glutDisplayFunc(display);
@@ -105,7 +105,7 @@ void display () {
   // draw_gradual_change();
   draw_animated();
 
-  glFlush();
+  glutSwapBuffers();
 }
 
 /* helper function to generate points required to render Sierpinski Pyramid using
@@ -113,7 +113,7 @@ void display () {
 void generate_points () {
   using namespace globals;
 
-  glm::vec3 p = generate_point_inside_pyramid();
+  glm::vec3 p = vertices[0];
 
   points.reserve(total_points);
   for (int i = 0; i < total_points; ++i) {
@@ -134,37 +134,6 @@ void generate_points () {
 /* helper function to find midpoint of two points */
 glm::vec3 midway_point (const glm::vec3 &p1, const glm::vec3 &p2) {
   return glm::vec3((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2);
-}
-
-/* helper function to generate a point inside the specified Pyramid */
-glm::vec3 generate_point_inside_pyramid () {
-  using namespace globals;
-  
-  static auto abc = glm::cross(vertices[1] - vertices[0], vertices[2] - vertices[0]);
-  static auto abd = glm::cross(vertices[1] - vertices[0], vertices[3] - vertices[0]);
-  static auto acd = glm::cross(vertices[2] - vertices[0], vertices[3] - vertices[0]);
-  static auto bcd = glm::cross(vertices[2] - vertices[1], vertices[3] - vertices[1]);
-
-  auto is_point_inside_pyramid = [&] (const glm::vec3 &point) {
-    auto d1 = glm::dot(point, abc);
-    auto d2 = glm::dot(point, abd);
-    auto d3 = glm::dot(point, acd);
-    auto d4 = glm::dot(point, bcd);
-
-    bool has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0) || (d4 < 0);
-    bool has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0) || (d4 > 0);
-
-    return !(has_neg and has_pos);
-  };
-
-  glm::vec3 point;
-
-  while (true) {
-    point = {real_distribution(rng), real_distribution(rng), real_distribution(rng)};
-
-    if (is_point_inside_pyramid(point))
-      return point;
-  }
 }
 
 /* keypress handler */

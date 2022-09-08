@@ -1,5 +1,4 @@
-#include "GL/glut.h"
-#include "glm/vec3.hpp"
+#include "GL/freeglut.h"
 #include "glm/glm.hpp"
 
 #include <algorithm>
@@ -7,6 +6,7 @@
 #include <iostream>
 #include <random>
 
+// global and state variables
 namespace globals {
   const int screen_width = 720;
   const int screen_height = 720;
@@ -44,29 +44,33 @@ void display ();
 void timer (int);
 void generate_points ();
 glm::vec3 midway_point (const glm::vec3&, const glm::vec3&);
-glm::vec3 generate_point_inside_triangle ();
 void draw_simple ();
 void draw_random_colored ();
 void draw_gradual_change ();
 void draw_animated ();
 
 int main (int argc, char** argv) {
+  // generate points for sierpinski triangle
   generate_points();
 
+  // inititalise GLUT
   glutInit(&argc, argv);
-
   glutInitWindowSize(globals::screen_width, globals::screen_height);
   glutInitWindowPosition(100, 100);
-  glutInitDisplayMode(GLUT_RGB);
+  glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
 
+  // create window and initialise callbacks
   glutCreateWindow("Sierpinski Triangle");
   glutTimerFunc(0, timer, 0);
   glutDisplayFunc(display);
+
+  // run main event loop
   glutMainLoop();
 
   return 0;
 }
 
+// display callback called by GLUT for every render
 void display () {
   glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
@@ -79,15 +83,17 @@ void display () {
   glutSwapBuffers();
 }
 
+// re-render scene after a fixed timestep
 void timer (int value) {
   glutPostRedisplay();
   glutTimerFunc(16, timer, 0);
 }
 
+// generate points for the sierpinski triangle
 void generate_points () {
   using namespace globals;
 
-  glm::vec3 p = generate_point_inside_triangle();
+  glm::vec3 p = vertices[0];
 
   points.reserve(total_points);
   for (int i = 0; i < total_points; ++i) {
@@ -105,36 +111,9 @@ void generate_points () {
   });
 }
 
+// find the midpoint of two points
 glm::vec3 midway_point (const glm::vec3 &p1, const glm::vec3 &p2) {
   return glm::vec3((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2);
-}
-
-glm::vec3 generate_point_inside_triangle () {
-  using namespace globals;
-
-  auto sign = [] (auto &p1, auto &p2, auto &p3) {
-    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
-  };
-
-  auto is_point_inside_triangle = [&] (const glm::vec3 &point) {
-    auto d1 = sign(point, vertices[0], vertices[1]);
-    auto d2 = sign(point, vertices[1], vertices[2]);
-    auto d3 = sign(point, vertices[2], vertices[0]);
-
-    bool has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
-    bool has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
-
-    return !(has_neg and has_pos);
-  };
-
-  glm::vec3 point;
-
-  while (true) {
-    point = {real_distribution(rng), real_distribution(rng), 0.0f};
-
-    if (is_point_inside_triangle(point))
-      return point;
-  }
 }
 
 void draw_simple () {
