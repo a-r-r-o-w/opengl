@@ -18,7 +18,7 @@ If all libraries have been setup correctly, building the program is really simpl
 
 ```
 git clone https://github.com/a-r-r-o-w/opengl
-cd opengl/.templates/simple-glut-template.cpp
+cd opengl/.templates/simple-glut-template
 mkdir build
 cd build
 cmake ..
