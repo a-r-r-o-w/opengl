@@ -9,3 +9,5 @@ build/
 # vscode
 .vscode/
 
+# local testing dir
+.local-test/
