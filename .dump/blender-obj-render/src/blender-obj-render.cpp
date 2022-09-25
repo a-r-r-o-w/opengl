@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <random>
 #include <tuple>
 #include <vector>
 
@@ -21,6 +22,10 @@ namespace globals {
 
   std::vector <glm::vec3> vertices;
   std::vector <std::tuple <int, int, int>> faces;
+
+  std::random_device rd;
+  std::mt19937 rng (rd());
+  std::uniform_real_distribution <> distribution (0.0f, 1.0f);
 }
 
 namespace callback {
@@ -73,7 +78,7 @@ int main (int argc, char** argv) {
   read_mesh();
 
   glEnable(GL_DEPTH_TEST);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
   // start main loop
   gluLookAt(0, 1, 0, 0, 0, 0, 0, 0, 1); 
@@ -87,8 +92,8 @@ void read_mesh () {
   using globals::faces;
 
   // std::ifstream file ("../res/sphere.obj");
-  std::ifstream file ("../res/torus.obj");
-  // std::ifstream file ("../res/suzanne.obj");
+  // std::ifstream file ("../res/torus.obj");
+  std::ifstream file ("../res/suzanne.obj");
   std::string line;
   std::stringstream ss;
   glm::vec3 v;
@@ -142,6 +147,7 @@ namespace callback {
       glVertex3f(v1.x, v1.y, v1.z);
       glVertex3f(v2.x, v2.y, v2.z);
       glVertex3f(v3.x, v3.y, v3.z);
+      glColor3f(distribution(rng), distribution(rng), distribution(rng));
     }
     glEnd();
 
@@ -187,7 +193,7 @@ namespace callback {
   }
 
   void idle () {
-    display();
+    // display();
   }
 
 } // callback

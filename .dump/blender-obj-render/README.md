@@ -1,6 +1,6 @@
-# Simple GLUT Template
+# Blender OBJ Render
 
-This is a simple project template that I use as a starting point when using GLUT.
+This program renders a model exported in OBJ format from Blender.
 
 ### Requirements
 
@@ -18,10 +18,10 @@ If all libraries have been setup correctly, building the program is really simpl
 
 ```
 git clone https://github.com/a-r-r-o-w/opengl
-cd opengl/.templates/simple-glut-template
+cd opengl/.dump/blender-obj-render
 mkdir build
 cd build
 cmake ..
 make
-./simple-glut-template
+./blender-obj-render
 ```
