@@ -1,0 +1,6 @@
+[submodule ".dump/hello-triangle-no-dependency-installation/deps/glm"]
+	path = .dump/hello-triangle-no-dependency-installation/deps/glm
+	url = https://github.com/g-truc/glm
+[submodule ".dump/hello-triangle-no-dependency-installation/deps/glfw"]
+	path = .dump/hello-triangle-no-dependency-installation/deps/glfw
+	url = https://github.com/glfw/glfw
