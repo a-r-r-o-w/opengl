@@ -10,7 +10,7 @@ All requirements are installed automatically with `git`. So, you should be able 
 
 ```
 git clone --recursive https://github.com/a-r-r-o-w/opengl
-cd opengl/hello-triangle-no-dependency-installation
+cd opengl/.dump/hello-triangle-no-dependency-installation
 mkdir build
 cd build
 cmake ..
