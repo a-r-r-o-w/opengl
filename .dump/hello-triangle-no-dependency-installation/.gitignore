@@ -1,0 +1,14 @@
+# binaries
+build/
+*.out
+*.s
+*.exe
+*.so
+*.a
+
+# vscode
+.vscode/
+
+# deps (moved into parent dir)
+deps/
+
