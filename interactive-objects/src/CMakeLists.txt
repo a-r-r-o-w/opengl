@@ -31,6 +31,7 @@ add_executable(
   interactive-objects
     ./application.cpp
     ./object.cpp
+    ./camera.cpp
     ./main.cpp
 )
 

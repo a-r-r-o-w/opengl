@@ -45,4 +45,8 @@ namespace gl {
     return *m_index_buffer;
   }
 
+  const std::string& object::get_name () const {
+    return m_name;
+  }
+
 } // namespace gl
