@@ -24,6 +24,7 @@ endif()
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -g -DDEBUG_MODE -D_GLIBCXX_DEBUG -fsanitize=address,undefined")
 
 # Release build compile flags
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -O3")
 
 include_directories(./deps/glad/include)
 include_directories(./deps/glfw/include)
