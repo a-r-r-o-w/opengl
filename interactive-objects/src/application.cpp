@@ -444,12 +444,11 @@ static void HelpMarker(const char* desc)
     }
 }
 
-// Helper to wire demo markers located in code to an interactive browser
+/* The code below this line has been copied from imgui_demo.cpp */
+
 typedef void (*ImGuiDemoMarkerCallback)(const char* file, int line, const char* section, void* user_data);
 extern ImGuiDemoMarkerCallback      GImGuiDemoMarkerCallback;
 extern void*                        GImGuiDemoMarkerCallbackUserData;
-// ImGuiDemoMarkerCallback             GImGuiDemoMarkerCallback = NULL;
-// void*                               GImGuiDemoMarkerCallbackUserData = NULL;
 #define IMGUI_DEMO_MARKER(section)  do { if (GImGuiDemoMarkerCallback != NULL) GImGuiDemoMarkerCallback(__FILE__, __LINE__, section, GImGuiDemoMarkerCallbackUserData); } while (0)
 
 void ShowDemoWindowInputs()
