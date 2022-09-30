@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 
 project(
-  simple-glut-template
+  blender-obj-render
   DESCRIPTION
     "Blender OBJ Render"
   LANGUAGES
@@ -26,7 +26,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -g -DDEBUG
 # Release build compile flags
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -O3")
 
-include_directories(deps)
+include_directories(../../.deps)
 add_subdirectory(src)
 
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
