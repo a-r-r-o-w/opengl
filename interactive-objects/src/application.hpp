@@ -35,6 +35,10 @@ namespace gl {
       bool m_first_mouse;
       f32 m_last_mouse_x;
       f32 m_last_mouse_y;
+
+      // 348 is the maximum value of a GLFW_KEY_<XXXX>
+      static const u32 m_key_count = 349;
+      bool m_key_pressed[m_key_count];
     
     public:
       std::vector <std::unique_ptr <object>> m_objects;
@@ -50,6 +54,7 @@ namespace gl {
 
       void on_resize (i32, i32);
       void on_keypress (i32, i32, i32, i32);
+      void on_mouseclick (i32, i32, i32);
       void on_mousemove (f64, f64);
       void on_mousescroll (f64, f64);
       void on_update ();
@@ -60,6 +65,7 @@ namespace gl {
     
     private:
       void imgui_update ();
+      void keypress_update ();
 
       void set_callbacks ();
       void set_shaders ();

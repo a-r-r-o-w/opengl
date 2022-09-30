@@ -13,8 +13,9 @@ namespace gl {
 
     const f32 yaw = -90.0f;
     const f32 pitch = 0.0f;
-    const f32 speed = 1000.0f;
-    const f32 sensitivity = 0.01f;
+    const f32 roll = 0.0f;
+    const f32 speed = 200.0f;
+    const f32 sensitivity = 0.1f;
     const f32 zoom = 45.0f;
 
   } // namespace camera_defaults
@@ -23,7 +24,9 @@ namespace gl {
     front,
     back,
     left,
-    right
+    right,
+    left_roll,
+    right_roll
   };
 
   class camera {
@@ -36,6 +39,7 @@ namespace gl {
 
       f32 m_yaw;
       f32 m_pitch;
+      f32 m_roll;
       f32 m_speed;
       f32 m_sensitivity;
       f32 m_zoom;
@@ -43,7 +47,7 @@ namespace gl {
     public:
       camera (
         const glm::vec3& = glm::vec3(0.0f, 0.0f, 0.0f), const glm::vec3& = glm::vec3(0.0f, 1.0f, 0.0f),
-        f32 = camera_defaults::yaw, f32 = camera_defaults::pitch
+        f32 = camera_defaults::yaw, f32 = camera_defaults::pitch, f32 = camera_defaults::roll
       );
       ~camera();
 
@@ -52,6 +56,8 @@ namespace gl {
       void on_mousescroll (f32, f32);
 
       f32 get_fov () const;
+      const glm::vec3& get_position () const;
+      glm::mat4 get_projection (f32, f32, f32) const;
       glm::mat4 get_view () const;
     
     private:
