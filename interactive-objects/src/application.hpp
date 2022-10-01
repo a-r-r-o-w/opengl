@@ -41,8 +41,8 @@ namespace gl {
       bool m_key_pressed[m_key_count];
     
     public:
-      std::vector <std::unique_ptr <object>> m_objects;
-      i32 m_selected_object_index;
+      std::vector <std::unique_ptr <object>> m_scenes;
+      i32 m_scene_index;
 
     public:
       application (u32, u32, u32, const std::string&);

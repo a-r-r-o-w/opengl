@@ -49,18 +49,16 @@ namespace gl {
       
       case camera_movement::left_roll:
         m_roll += 1.0f;
+        if (m_roll >= 360.0f)
+          m_roll -= 360.0f;
         m_world_up = glm::normalize(glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(m_roll), m_front)) * glm::vec3(0, 1, 0));
-
-        // fun stuff ;)
-        // m_world_up = glm::normalize(glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(m_roll), m_front)) * m_world_up);
         break;
 
       case camera_movement::right_roll:
         m_roll -= 1.0f;
+        if (m_roll <= -360.0f)
+          m_roll += 360.0f;
         m_world_up = glm::normalize(glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(m_roll), m_front)) * glm::vec3(0, 1, 0));
-
-        // fun stuff ;)
-        // m_world_up = glm::normalize(glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(m_roll), m_front)) * m_world_up);
         break;
       
       default:
@@ -102,6 +100,22 @@ namespace gl {
   const glm::vec3& camera::get_position () const {
     return m_position;
   }
+  
+  glm::vec3& camera::get_position () {
+    return m_position;
+  }
+
+  f32 camera::get_yaw () const {
+    return m_yaw;
+  }
+
+  f32 camera::get_pitch () const {
+    return m_pitch;
+  }
+
+  f32 camera::get_roll () const {
+    return m_roll;
+  }
 
   glm::mat4 camera::get_projection (f32 aspect_ratio, f32 z_near, f32 z_far) const {
     return glm::perspective(glm::radians(m_zoom), aspect_ratio, z_near, z_far);
@@ -109,6 +123,14 @@ namespace gl {
 
   glm::mat4 camera::get_view () const {
     return glm::lookAt(m_position, m_position + m_front, m_up);
+  }
+
+  void camera::set_fov (f32 zoom) {
+    m_zoom = zoom;
+  }
+
+  void camera::set_position (const glm::vec3 &position) {
+    m_position = position;
   }
 
   void camera::update_camera () {

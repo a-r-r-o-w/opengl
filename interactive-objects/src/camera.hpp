@@ -57,8 +57,16 @@ namespace gl {
 
       f32 get_fov () const;
       const glm::vec3& get_position () const;
+      glm::vec3& get_position ();
+      f32 get_yaw () const;
+      f32 get_pitch () const;
+      f32 get_roll () const;
+
       glm::mat4 get_projection (f32, f32, f32) const;
       glm::mat4 get_view () const;
+
+      void set_fov (f32);
+      void set_position (const glm::vec3&);
     
     private:
       void update_camera ();
