@@ -1,6 +1,8 @@
 #ifndef HEADER_SCENE_HPP
 #define HEADER_SCENE_HPP
 
+#include <memory>
+
 #include "types.hpp"
 #include "camera.hpp"
 #include "object.hpp"
@@ -11,12 +13,17 @@ namespace gl {
 
   class scene {
     private:
-      std::vector <object> m_objects;
-      camera m_camera;
+      std::string m_name;
+      std::vector <std::unique_ptr <object>> m_objects;
 
     public:
-      scene ();
+      scene (const std::string&);
       ~scene ();
+
+      void add_object (std::unique_ptr <object>&&);
+
+      const std::vector <std::unique_ptr <object>>& get_objects () const;
+      const std::string& get_name () const;
   };
 
 } // namespace gl

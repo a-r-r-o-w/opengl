@@ -10,6 +10,7 @@
 
 #include "types.hpp"
 #include "renderer.hpp"
+#include "scene.hpp"
 #include "object.hpp"
 #include "camera.hpp"
 
@@ -32,16 +33,21 @@ namespace gl {
       f32 m_delta_time;
       f32 m_last_frame;
 
+      bool m_should_camera_move;
       bool m_first_mouse;
       f32 m_last_mouse_x;
       f32 m_last_mouse_y;
 
+      static constexpr f32 m_grid_expanse_factor = 5.0f;
+      std::unique_ptr <object> m_grid;
+      f32 m_grid_spacing;
+
       // 348 is the maximum value of a GLFW_KEY_<XXXX>
-      static const u32 m_key_count = 349;
-      bool m_key_pressed[m_key_count];
+      static constexpr u32 m_key_count = 349;
+      std::vector <bool> m_key_pressed;
     
     public:
-      std::vector <std::unique_ptr <object>> m_scenes;
+      std::vector <std::unique_ptr <scene>> m_scenes;
       i32 m_scene_index;
 
     public:
@@ -69,6 +75,8 @@ namespace gl {
 
       void set_callbacks ();
       void set_shaders ();
+
+      void create_grid ();
     
     public:
       void initialise_demo ();

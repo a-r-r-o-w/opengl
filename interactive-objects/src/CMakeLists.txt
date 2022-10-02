@@ -30,6 +30,7 @@ add_library (
 add_executable(
   interactive-objects
     ./application.cpp
+    ./scene.cpp
     ./object.cpp
     ./camera.cpp
     ./main.cpp

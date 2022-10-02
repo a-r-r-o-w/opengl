@@ -11,16 +11,23 @@
 #include <imgui/backends/imgui_impl_opengl3.h>
 
 #include "application.hpp"
+#include "scene.hpp"
 #include "utils.hpp"
 
 namespace gl {
 
-  static std::unique_ptr <gl::object> create_scene_none ();
-  static std::unique_ptr <gl::object> create_scene_triangle (u32, u32, u32);
-  static std::unique_ptr <gl::object> create_scene_rectangle (u32, u32, u32);
-  static std::unique_ptr <gl::object> create_scene_cuboid (u32, u32, u32);
-  static std::unique_ptr <gl::object> create_scene_torus (u32, u32, u32);
-  static std::unique_ptr <gl::object> create_scene_suzanne (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_none ();
+  static std::unique_ptr <gl::scene> create_scene_triangle (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_rectangle (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_cuboid (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_circle (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_torus (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_suzanne (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_klein_bottle (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_planetary_gear (u32, u32, u32);
+
+  static glm::vec3 circle_rotate_point (glm::vec3, glm::vec3, f32);
+  static void circle_generate (object&, u32, u32, u32, u32);
 
   application::application (u32 width, u32 height, u32 depth, const std::string &name)
     : m_width (width),
@@ -33,9 +40,13 @@ namespace gl {
       m_camera (glm::vec3((f32)m_width / 2, (f32)m_height / 2, 0.0f)),
       m_delta_time (0.0f),
       m_last_frame (0.0f),
+      m_should_camera_move (false),
       m_first_mouse (true),
       m_last_mouse_x (m_width / 2),
       m_last_mouse_y (m_height / 2),
+      m_grid (nullptr),
+      m_grid_spacing (25.0f),
+      m_key_pressed (m_key_count),
       m_scenes (),
       m_scene_index (1)
   {
@@ -65,11 +76,12 @@ namespace gl {
     glfwSwapInterval(1);
 
     glEnable(GL_DEPTH_TEST);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     set_callbacks();
     set_shaders();
     set_clear_color({0.2f, 0.2f, 0.2f, 1.0f});
+
+    create_grid();
 
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -136,9 +148,12 @@ namespace gl {
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
       if (action == GLFW_PRESS) {
         glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        m_should_camera_move = true;
       }
       else {
         glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        m_should_camera_move = false;
+        m_first_mouse = true;
       }
     }
   }
@@ -168,7 +183,8 @@ namespace gl {
     m_last_mouse_x = x_pos;
     m_last_mouse_y = y_pos;
     
-    m_camera.on_mousemove(x_offset, y_offset);
+    if (m_should_camera_move)
+      m_camera.on_mousemove(-x_offset, -y_offset);
   }
 
   void application::on_mousescroll (f64 x, f64 y) {
@@ -203,16 +219,30 @@ namespace gl {
     m_shader_program->set_uniform("u_model", model);
     m_shader_program->set_uniform("u_view", view);
     m_shader_program->set_uniform("u_projection", projection);
+
+    m_shader_program->set_uniform("u_color", glm::vec4(0.8f, 0.8f, 0.8f, 0.0f));
+    set_draw_mode(draw_mode::line);
+    draw_elements(
+      m_grid->get_vertex_array(),
+      m_grid->get_index_buffer(),
+      *m_shader_program
+    );
+
     m_shader_program->set_uniform("u_color", glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+    set_draw_mode(draw_mode::triangle);
 
     if (m_scene_index >= 0 and m_scene_index < (i32)m_scenes.size()) {
-      model = m_scenes[m_scene_index]->get_model();
-      m_shader_program->set_uniform("u_model", model);
-      draw_elements(
-        m_scenes[m_scene_index]->get_vertex_array(),
-        m_scenes[m_scene_index]->get_index_buffer(),
-        *m_shader_program
-      );
+      auto &scene = *m_scenes[m_scene_index];
+
+      for (auto &o: scene.get_objects()) {
+        model = o->get_model();
+        m_shader_program->set_uniform("u_model", model);
+        draw_elements(
+          o->get_vertex_array(),
+          o->get_index_buffer(),
+          *m_shader_program
+        );
+      }
     }
 
     imgui_update();
@@ -241,11 +271,6 @@ namespace gl {
 
     ImGui::ShowDemoWindow();
 
-    std::string shape_name = "None";
-
-    if (m_scene_index >= 0 and m_scene_index < (i32)m_scenes.size())
-      shape_name = m_scenes[m_scene_index]->get_name();
-
     if (ImGui::CollapsingHeader("Application", ImGuiTreeNodeFlags_DefaultOpen)) {
       {
         ImGui::Text("Scene");
@@ -256,6 +281,21 @@ namespace gl {
           names.push_back(m_scenes[i]->get_name().c_str());
         
         ImGui::Combo("##", &m_scene_index, names.data(), names.size());
+
+        static bool wireframe = false;
+        static bool depthtest = true;
+
+        bool previous_wireframe_value = wireframe;
+        bool previous_depthtest_value = depthtest;
+
+        ImGui::Checkbox("Wireframe", &wireframe);
+        ImGui::Checkbox("Depth Test", &depthtest);
+
+        if (previous_wireframe_value != wireframe)
+          glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
+        
+        if (previous_depthtest_value != depthtest)
+          (depthtest ? glEnable : glDisable)(GL_DEPTH_TEST);
       }
 
       ImGui::Separator();
@@ -292,14 +332,20 @@ namespace gl {
     if (m_key_pressed[GLFW_KEY_W])
       m_camera.on_keypress(camera_movement::front, m_delta_time);
 
-    if (m_key_pressed[GLFW_KEY_A])
+    if (m_key_pressed[GLFW_KEY_A] or m_key_pressed[GLFW_KEY_LEFT])
       m_camera.on_keypress(camera_movement::right, m_delta_time);
 
     if (m_key_pressed[GLFW_KEY_S])
       m_camera.on_keypress(camera_movement::back, m_delta_time);
 
-    if (m_key_pressed[GLFW_KEY_D])
+    if (m_key_pressed[GLFW_KEY_D] or m_key_pressed[GLFW_KEY_RIGHT])
       m_camera.on_keypress(camera_movement::left, m_delta_time);
+    
+    if (m_key_pressed[GLFW_KEY_UP])
+      m_camera.on_keypress(camera_movement::up, m_delta_time);
+    
+    if (m_key_pressed[GLFW_KEY_DOWN])
+      m_camera.on_keypress(camera_movement::down, m_delta_time);
 
     if (m_key_pressed[GLFW_KEY_Q])
       m_camera.on_keypress(camera_movement::left_roll, m_delta_time);
@@ -349,25 +395,54 @@ namespace gl {
     m_shader_program->link();
   }
 
+  void application::create_grid () {
+    m_grid.reset(new object("Grid"));
+
+    i32 len = std::max(m_width, m_depth);
+    f32 h_mid = (f32)m_height / 2;
+
+    f32 left = -len * m_grid_expanse_factor;
+    f32 right = len * m_grid_expanse_factor;
+    f32 back = -len * m_grid_expanse_factor;
+    f32 front = len * m_grid_expanse_factor;
+
+    u32 index = 0;
+
+    for (f32 row = back; row < front; row += m_grid_spacing) {
+      m_grid->add_vertex({left, h_mid, row});
+      m_grid->add_vertex({right, h_mid, row});
+      m_grid->add_index(index++);
+      m_grid->add_index(index++);
+    }
+
+    for (f32 col = left; col < right; col += m_grid_spacing) {
+      m_grid->add_vertex({col, h_mid, back});
+      m_grid->add_vertex({col, h_mid, front});
+      m_grid->add_index(index++);
+      m_grid->add_index(index++);
+    }
+
+    m_grid->load();
+  }
+
   void application::initialise_demo () {
     m_scenes.emplace_back(create_scene_none());
     m_scenes.emplace_back(create_scene_triangle(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_rectangle(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_cuboid(m_width, m_height, m_depth));
+    m_scenes.emplace_back(create_scene_circle(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_torus(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_suzanne(m_width, m_height, m_depth));
+    m_scenes.emplace_back(create_scene_klein_bottle(m_width, m_height, m_depth));
+    m_scenes.emplace_back(create_scene_planetary_gear(m_width, m_height, m_depth));
   }
 
-  static std::unique_ptr <gl::object> create_scene_none () {
-    auto object = std::make_unique <gl::object> ("None");
-    
-    (*object)
-      .load();
-
-    return object;
+  static std::unique_ptr <gl::scene> create_scene_none () {
+    auto scene = std::make_unique <gl::scene> ("Empty");
+    return scene;
   }
 
-  static std::unique_ptr <gl::object> create_scene_triangle (u32 width, u32 height, u32 depth) {
+  static std::unique_ptr <gl::scene> create_scene_triangle (u32 width, u32 height, u32 depth) {
     f32 t_width  = (f32)width / 10;
     f32 t_height = (f32)height / 10;
 
@@ -380,6 +455,7 @@ namespace gl {
     f32 bottom = h_mid - t_height;
     f32 top    = h_mid + t_height;
 
+    auto scene = std::make_unique <gl::scene> ("Triangle");
     auto object = std::make_unique <gl::object> ("Triangle");
 
     (*object)
@@ -390,11 +466,13 @@ namespace gl {
       .add_index(1)
       .add_index(2)
       .load();
+    
+    scene->add_object(std::move(object));
 
-    return object;
+    return scene;
   }
 
-  static std::unique_ptr <gl::object> create_scene_rectangle (u32 width, u32 height, u32 depth) {
+  static std::unique_ptr <gl::scene> create_scene_rectangle (u32 width, u32 height, u32 depth) {
     f32 t_width  = (f32)width / 10;
     f32 t_height = (f32)height / 10;
 
@@ -407,6 +485,7 @@ namespace gl {
     f32 bottom = h_mid - t_height;
     f32 top    = h_mid + t_height;
 
+    auto scene = std::make_unique <gl::scene> ("Rectangle");
     auto object = std::make_unique <gl::object> ("Rectangle");
 
     (*object)
@@ -417,11 +496,13 @@ namespace gl {
       .add_index(0).add_index(1).add_index(2)
       .add_index(2).add_index(3).add_index(0)
       .load();
+    
+    scene->add_object(std::move(object));
 
-    return object;
+    return scene;
   }
 
-  static std::unique_ptr <gl::object> create_scene_cuboid (u32 width, u32 height, u32 depth) {
+  static std::unique_ptr <gl::scene> create_scene_cuboid (u32 width, u32 height, u32 depth) {
     f32 t_width  = (f32)width / 10;
     f32 t_height = (f32)height / 10;
     f32 t_depth = (f32)depth / 10;
@@ -436,6 +517,7 @@ namespace gl {
     f32 top    = h_mid + t_height;
     f32 back   = -d_mid - t_depth;
 
+    auto scene = std::make_unique <gl::scene> ("Cuboid");
     auto object = std::make_unique <gl::object> ("Cuboid");
 
     (*object)
@@ -460,30 +542,134 @@ namespace gl {
       .add_index(3).add_index(2).add_index(6)
       .add_index(6).add_index(7).add_index(3)
       .load();
+    
+    scene->add_object(std::move(object));
 
-    return object;
+    return scene;
   }
 
-  static std::unique_ptr <gl::object> create_scene_torus (u32 width, u32 height, u32 depth) {
+  static std::unique_ptr <gl::scene> create_scene_circle (u32 width, u32 height, u32 depth) {
+    auto scene = std::make_unique <gl::scene> ("Circle");
+    auto object = std::make_unique <gl::object> ("Circle");
+
+    circle_generate(*object, 10, width, height, depth);
+    object->load();
+    
+    scene->add_object(std::move(object));
+
+    return scene;
+  }
+
+  static std::unique_ptr <gl::scene> create_scene_torus (u32 width, u32 height, u32 depth) {
     f32 w_mid = (f32)width / 2;
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
+    auto scene = std::make_unique <gl::scene> ("Torus");
     auto object = load_blender_obj("../res/torus.obj", "Torus");
-    object->scale(glm::vec3(100.0f));
-    object->translate({w_mid, h_mid, -d_mid});
-    return object;
+
+    (*object)
+      .scale(glm::vec3(100.0f))
+      .translate({w_mid, h_mid, -d_mid});
+
+    scene->add_object(std::move(object));
+    
+    return scene;
   }
 
-  static std::unique_ptr <gl::object> create_scene_suzanne (u32 width, u32 height, u32 depth) {
+  static std::unique_ptr <gl::scene> create_scene_suzanne (u32 width, u32 height, u32 depth) {
     f32 w_mid = (f32)width / 2;
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
+    auto scene = std::make_unique <gl::scene> ("Suzanne");;
     auto object = load_blender_obj("../res/suzanne.obj", "Suzanne");
-    object->scale(glm::vec3(100.0f));
-    object->translate({w_mid, h_mid, -d_mid});
-    return object;
+    
+    (*object)
+      .scale(glm::vec3(100.0f))
+      .translate({w_mid, h_mid, -d_mid});
+
+    scene->add_object(std::move(object));
+    
+    return scene;
+  }
+
+  static std::unique_ptr <gl::scene> create_scene_klein_bottle (u32 width, u32 height, u32 depth) {
+    f32 w_mid = (f32)width / 2;
+    f32 h_mid = (f32)height / 2;
+    f32 d_mid = (f32)depth / 2;
+
+    auto scene = std::make_unique <gl::scene> ("Klein Bottle");;
+    auto object = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle");
+    
+    (*object)
+      .scale(glm::vec3(100.0f))
+      .translate({w_mid, h_mid, -d_mid});
+
+    scene->add_object(std::move(object));
+    
+    return scene;
+  }
+
+  static std::unique_ptr <gl::scene> create_scene_planetary_gear (u32 width, u32 height, u32 depth) {
+    f32 w_mid = (f32)width / 2;
+    f32 h_mid = (f32)height / 2;
+    f32 d_mid = (f32)depth / 2;
+
+    auto scene = std::make_unique <gl::scene> ("Planetary Gear");
+    auto object = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear");
+
+    (*object)
+      .scale(glm::vec3(2.0f))
+      .rotate(90.0f, {1, 0, 0})
+      .translate({w_mid, h_mid, -d_mid});
+
+    scene->add_object(std::move(object));
+    
+    return scene;
+  }
+
+  glm::vec3 circle_rotate_point (glm::vec3 center, glm::vec3 point, f32 angle) {
+    f32 s = glm::sin(angle);
+    f32 c = glm::cos(angle);
+
+    point.x -= center.x;
+    point.y -= center.y;
+
+    f32 xnew = point.x * c - point.y * s;
+    f32 ynew = point.x * s + point.y * c;
+
+    point.x = xnew + center.x;
+    point.y = ynew + center.y;
+
+    return point;
+  }
+
+  void circle_generate (object& object, u32 points, u32 width, u32 height, u32 depth) {
+    f32 w_mid = (f32)width / 2;
+    f32 h_mid = (f32)height / 2;
+    f32 d_mid = (f32)depth / 2;
+    f32 angle = glm::radians(360.0f / points);
+
+    object.clear();
+
+    object.add_vertex({0, 0, 0});
+    object.add_vertex({1, 0, 0});
+
+    for (i32 i = 0; i < (i32)points; ++i) {
+      object.add_vertex(circle_rotate_point({0, 0, 0}, object.get_vertices().back(), angle));
+      object.add_index(i);
+      object.add_index(i + 1);
+      object.add_index(0);
+    }
+
+    object.add_index(object.get_vertices().size() - 2);
+    object.add_index(object.get_vertices().size() - 1);
+    object.add_index(0);
+
+    object
+      .scale(glm::vec3(100.0f))
+      .translate({w_mid, h_mid, -d_mid});
   }
 
 } // namespace gl

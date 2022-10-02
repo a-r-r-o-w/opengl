@@ -25,6 +25,8 @@ namespace gl {
     back,
     left,
     right,
+    up,
+    down,
     left_roll,
     right_roll
   };
@@ -54,6 +56,7 @@ namespace gl {
       void on_keypress (const camera_movement&, f32);
       void on_mousemove (f32, f32);
       void on_mousescroll (f32, f32);
+      void on_update ();
 
       f32 get_fov () const;
       const glm::vec3& get_position () const;

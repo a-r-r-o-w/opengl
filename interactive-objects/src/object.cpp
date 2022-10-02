@@ -2,7 +2,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "object.hpp"
-
+#include <iostream>
 namespace gl {
 
   object::object (const std::string &name)
@@ -16,7 +16,9 @@ namespace gl {
       m_vertex_buffer_layout (),
       m_index_buffer (nullptr),
       m_vertex_buffer (nullptr)
-  { }
+    {
+      m_vertex_buffer_layout.push <f32> (3);
+    }
 
   object::~object () {
 
@@ -32,23 +34,49 @@ namespace gl {
     return *this;
   }
 
-  void object::load () {
-    m_index_buffer = std::make_unique <index_buffer> (m_indices.data(), m_indices.size());
-    m_vertex_buffer = std::make_unique <vertex_buffer> (m_vertices.data(), 3 * sizeof(f32) * m_vertices.size());
-    m_vertex_buffer_layout.push <f32> (3);
+  object& object::clear () {
+    m_vertices.clear();
+    m_indices.clear();
+    m_translate = glm::mat4(1.0f);
+    m_rotate = glm::mat4(1.0f);
+    m_scale = glm::mat4(1.0f);
+    m_index_buffer.reset(nullptr);
+    m_vertex_buffer.reset(nullptr);
+    return *this;
+  }
+
+  object& object::load () {
+    m_index_buffer.reset(new index_buffer(m_indices.data(), m_indices.size()));
+    m_vertex_buffer.reset(new vertex_buffer(m_vertices.data(), 3 * sizeof(f32) * m_vertices.size()));
     m_vertex_array.add_buffer(*m_vertex_buffer, m_vertex_buffer_layout);
+    return *this;
   }
 
-  void object::translate (const glm::vec3& t) {
+  object& object::translate (const glm::vec3& t) {
     m_translate = glm::translate(m_translate, t);
+    return *this;
   }
 
-  void object::scale (const glm::vec3& s) {
+  object& object::rotate (f32 angle, const glm::vec3& r) {
+    m_rotate = glm::rotate(m_rotate, glm::radians(angle), r);
+    return *this;
+  }
+
+  object& object::scale (const glm::vec3& s) {
     m_scale = glm::scale(m_scale, s);
+    return *this;
   }
 
   glm::mat4 object::get_model () const {
     return m_translate * m_rotate * m_scale;
+  }
+
+  const std::vector <glm::vec3>& object::get_vertices () const {
+    return m_vertices;
+  }
+
+  const std::vector <u32>& object::get_indices () const {
+    return m_indices;
   }
 
   const vertex_array& object::get_vertex_array () const {

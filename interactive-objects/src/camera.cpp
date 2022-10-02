@@ -47,6 +47,14 @@ namespace gl {
         m_position -= m_right * velocity;
         break;
       
+      case camera_movement::up:
+        m_position += m_up * velocity;
+        break;
+      
+      case camera_movement::down:
+        m_position -= m_up * velocity;
+        break;
+      
       case camera_movement::left_roll:
         m_roll += 1.0f;
         if (m_roll >= 360.0f)
@@ -76,10 +84,10 @@ namespace gl {
     m_yaw += x_offset;
     m_pitch += y_offset;
 
-    // if (m_pitch > 89.0f)
-    //   m_pitch = 89.0f;
-    // if (m_pitch < -89.0f)
-    //   m_pitch = -89.0f;
+    if (m_pitch > 89.0f)
+      m_pitch = 89.0f;
+    if (m_pitch < -89.0f)
+      m_pitch = -89.0f;
     
     update_camera();
   }

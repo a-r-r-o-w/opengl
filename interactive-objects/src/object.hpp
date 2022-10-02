@@ -9,7 +9,7 @@
 namespace gl {
 
   class object {
-    private:
+    protected:
       std::string m_name;
       std::vector <glm::vec3> m_vertices;
       std::vector <u32> m_indices;
@@ -30,13 +30,16 @@ namespace gl {
       object& add_vertex (const glm::vec3&);
       object& add_index  (u32);
 
-      void load ();
+      object& clear ();
+      object& load ();
 
-      void translate (const glm::vec3&);
-      void rotate ();
-      void scale (const glm::vec3&);
+      object& translate (const glm::vec3&);
+      object& rotate (f32, const glm::vec3&);
+      object& scale (const glm::vec3&);
 
       glm::mat4 get_model () const;
+      const std::vector <glm::vec3>& get_vertices () const;
+      const std::vector <u32>& get_indices () const;
 
       const vertex_array& get_vertex_array () const;
       const index_buffer& get_index_buffer () const;
