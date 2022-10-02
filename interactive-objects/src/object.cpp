@@ -5,6 +5,15 @@
 #include <iostream>
 namespace gl {
 
+  object_properties::object_properties (const glm::vec3& v)
+    : m_velocity (v) {
+      
+  }
+
+  object_properties::~object_properties () {
+
+  }
+
   object::object (const std::string &name)
     : m_name (name),
       m_vertices (),
@@ -65,6 +74,18 @@ namespace gl {
   object& object::scale (const glm::vec3& s) {
     m_scale = glm::scale(m_scale, s);
     return *this;
+  }
+
+  const glm::mat4& object::get_translate () const {
+    return m_translate;
+  }
+
+  const glm::mat4& object::get_rotate () const {
+    return m_rotate;
+  }
+  
+  const glm::mat4& object::get_scale () const {
+    return m_scale;
   }
 
   glm::mat4 object::get_model () const {

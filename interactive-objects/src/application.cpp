@@ -1,4 +1,5 @@
 #include <iostream>
+#include <random>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -21,10 +22,12 @@ namespace gl {
   static std::unique_ptr <gl::scene> create_scene_rectangle (u32, u32, u32);
   static std::unique_ptr <gl::scene> create_scene_cuboid (u32, u32, u32);
   static std::unique_ptr <gl::scene> create_scene_circle (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_sphere (u32, u32, u32);
   static std::unique_ptr <gl::scene> create_scene_torus (u32, u32, u32);
   static std::unique_ptr <gl::scene> create_scene_suzanne (u32, u32, u32);
   static std::unique_ptr <gl::scene> create_scene_klein_bottle (u32, u32, u32);
   static std::unique_ptr <gl::scene> create_scene_planetary_gear (u32, u32, u32);
+  static std::unique_ptr <gl::scene> create_scene_assignment (u32, u32, u32);
 
   static glm::vec3 circle_rotate_point (glm::vec3, glm::vec3, f32);
   static void circle_generate (object&, u32, u32, u32, u32);
@@ -46,6 +49,7 @@ namespace gl {
       m_last_mouse_y (m_height / 2),
       m_grid (nullptr),
       m_grid_spacing (25.0f),
+      m_display_grid (true),
       m_key_pressed (m_key_count),
       m_scenes (),
       m_scene_index (1)
@@ -220,13 +224,15 @@ namespace gl {
     m_shader_program->set_uniform("u_view", view);
     m_shader_program->set_uniform("u_projection", projection);
 
+    if (m_display_grid) {
     m_shader_program->set_uniform("u_color", glm::vec4(0.8f, 0.8f, 0.8f, 0.0f));
-    set_draw_mode(draw_mode::line);
-    draw_elements(
-      m_grid->get_vertex_array(),
-      m_grid->get_index_buffer(),
-      *m_shader_program
-    );
+      set_draw_mode(draw_mode::line);
+      draw_elements(
+        m_grid->get_vertex_array(),
+        m_grid->get_index_buffer(),
+        *m_shader_program
+      );
+    }
 
     m_shader_program->set_uniform("u_color", glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
     set_draw_mode(draw_mode::triangle);
@@ -243,8 +249,9 @@ namespace gl {
           *m_shader_program
         );
       }
-    }
 
+      scene.on_update(m_delta_time);
+    }
     imgui_update();
 
     m_running = !glfwWindowShouldClose(m_window);
@@ -290,6 +297,7 @@ namespace gl {
 
         ImGui::Checkbox("Wireframe", &wireframe);
         ImGui::Checkbox("Depth Test", &depthtest);
+        ImGui::Checkbox("Grid", &m_display_grid);
 
         if (previous_wireframe_value != wireframe)
           glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
@@ -315,7 +323,8 @@ namespace gl {
     
     ImGui::Separator();
 
-    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    ImGui::Text("Last render %.3f ms", m_delta_time * 1000);
+    ImGui::Text("FPS %.3f", ImGui::GetIO().Framerate);
     ImGui::Text("Press ESC to exit");
     ImGui::End();
 
@@ -431,14 +440,16 @@ namespace gl {
     m_scenes.emplace_back(create_scene_rectangle(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_cuboid(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_circle(m_width, m_height, m_depth));
+    m_scenes.emplace_back(create_scene_sphere(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_torus(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_suzanne(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_klein_bottle(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_planetary_gear(m_width, m_height, m_depth));
+    m_scenes.emplace_back(create_scene_assignment(m_width, m_height, m_depth));
   }
 
   static std::unique_ptr <gl::scene> create_scene_none () {
-    auto scene = std::make_unique <gl::scene> ("Empty");
+    auto scene = std::make_unique <gl::scene> ("Empty", scene_properties());
     return scene;
   }
 
@@ -455,8 +466,9 @@ namespace gl {
     f32 bottom = h_mid - t_height;
     f32 top    = h_mid + t_height;
 
-    auto scene = std::make_unique <gl::scene> ("Triangle");
+    auto scene = std::make_unique <gl::scene> ("Triangle", scene_properties());
     auto object = std::make_unique <gl::object> ("Triangle");
+    auto properties = gl::object_properties({0, 0, 0});
 
     (*object)
       .add_vertex({left, bottom, -d_mid})
@@ -467,7 +479,7 @@ namespace gl {
       .add_index(2)
       .load();
     
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
 
     return scene;
   }
@@ -485,8 +497,9 @@ namespace gl {
     f32 bottom = h_mid - t_height;
     f32 top    = h_mid + t_height;
 
-    auto scene = std::make_unique <gl::scene> ("Rectangle");
+    auto scene = std::make_unique <gl::scene> ("Rectangle", scene_properties());
     auto object = std::make_unique <gl::object> ("Rectangle");
+    auto properties = gl::object_properties({0, 0, 0});
 
     (*object)
       .add_vertex({left, bottom, -d_mid})
@@ -497,7 +510,7 @@ namespace gl {
       .add_index(2).add_index(3).add_index(0)
       .load();
     
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
 
     return scene;
   }
@@ -517,8 +530,9 @@ namespace gl {
     f32 top    = h_mid + t_height;
     f32 back   = -d_mid - t_depth;
 
-    auto scene = std::make_unique <gl::scene> ("Cuboid");
+    auto scene = std::make_unique <gl::scene> ("Cuboid", scene_properties());
     auto object = std::make_unique <gl::object> ("Cuboid");
+    auto properties = gl::object_properties({0, 0, 0});
 
     (*object)
       .add_vertex({left, bottom, -d_mid})
@@ -543,20 +557,39 @@ namespace gl {
       .add_index(6).add_index(7).add_index(3)
       .load();
     
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
 
     return scene;
   }
 
   static std::unique_ptr <gl::scene> create_scene_circle (u32 width, u32 height, u32 depth) {
-    auto scene = std::make_unique <gl::scene> ("Circle");
+    auto scene = std::make_unique <gl::scene> ("Circle", scene_properties());
     auto object = std::make_unique <gl::object> ("Circle");
+    auto properties = gl::object_properties({0, 0, 0});
 
     circle_generate(*object, 10, width, height, depth);
     object->load();
     
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
 
+    return scene;
+  }
+
+  static std::unique_ptr <gl::scene> create_scene_sphere (u32 width, u32 height, u32 depth) {
+    f32 w_mid = (f32)width / 2;
+    f32 h_mid = (f32)height / 2;
+    f32 d_mid = (f32)depth / 2;
+
+    auto scene = std::make_unique <gl::scene> ("Sphere", scene_properties());
+    auto object = load_blender_obj("../res/sphere.obj", "Sphere");
+    auto properties = gl::object_properties({0, 0, 0});
+
+    (*object)
+      .scale(glm::vec3(100.0f))
+      .translate({w_mid, h_mid, -d_mid});
+
+    scene->add_object(std::move(object), properties);
+    
     return scene;
   }
 
@@ -565,14 +598,15 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
-    auto scene = std::make_unique <gl::scene> ("Torus");
+    auto scene = std::make_unique <gl::scene> ("Torus", scene_properties());
     auto object = load_blender_obj("../res/torus.obj", "Torus");
+    auto properties = gl::object_properties({0, 0, 0});
 
     (*object)
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
     
     return scene;
   }
@@ -582,14 +616,15 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
-    auto scene = std::make_unique <gl::scene> ("Suzanne");;
+    auto scene = std::make_unique <gl::scene> ("Suzanne", scene_properties());
     auto object = load_blender_obj("../res/suzanne.obj", "Suzanne");
+    auto properties = gl::object_properties({0, 0, 0});
     
     (*object)
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
     
     return scene;
   }
@@ -599,14 +634,15 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
-    auto scene = std::make_unique <gl::scene> ("Klein Bottle");;
+    auto scene = std::make_unique <gl::scene> ("Klein Bottle", scene_properties());
     auto object = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle");
+    auto properties = gl::object_properties({0, 0, 0});
     
     (*object)
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
     
     return scene;
   }
@@ -616,15 +652,82 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
-    auto scene = std::make_unique <gl::scene> ("Planetary Gear");
+    auto scene = std::make_unique <gl::scene> ("Planetary Gear", scene_properties());
     auto object = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear");
+    auto properties = gl::object_properties({0, 0, 0});
 
     (*object)
       .scale(glm::vec3(2.0f))
       .rotate(90.0f, {1, 0, 0})
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object));
+    scene->add_object(std::move(object), properties);
+    
+    return scene;
+  }
+
+  static std::unique_ptr <gl::scene> create_scene_assignment (u32 width, u32 height, u32 depth) {
+    f32 w_mid = (f32)width / 2;
+    f32 h_mid = (f32)height / 2;
+    f32 d_mid = (f32)depth / 2;
+    
+    const f32 sphere_radius = 200.0f;
+    const f32 velocity_factor = 500.0f;
+
+    static std::random_device rd;
+    static std::mt19937 mt (rd());
+    static std::uniform_real_distribution <> rng (-1, 1);
+
+    static auto random_point_inside_sphere = [&] () -> glm::vec3 {
+      auto u = std::cbrt(rng(mt));
+      auto r = sphere_radius * u;
+      auto point = glm::vec3(rng(mt), rng(mt), rng(mt));
+      point = glm::normalize(point);
+      point *= r;
+      return point;
+    };
+
+    static auto random_velocity = [&] () -> glm::vec3 {
+      auto velocity = glm::vec3(rng(mt), rng(mt), rng(mt));
+      velocity *= velocity_factor;
+      return velocity;
+    };
+
+    auto scene = std::make_unique <gl::scene> (
+      "Assignment",
+      scene_properties(
+        w_mid - sphere_radius, w_mid + sphere_radius,
+        h_mid + sphere_radius, h_mid - sphere_radius,
+        d_mid + sphere_radius, d_mid - sphere_radius
+      )
+    );
+
+    auto object1 = load_blender_obj("../res/sphere.obj", "Sphere");
+    auto object2 = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle");
+    auto object3 = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear");
+
+    auto properties1 = gl::object_properties({0, 0, 0});
+    auto properties2 = gl::object_properties(random_velocity());
+    auto properties3 = gl::object_properties(random_velocity());
+
+    (*object1)
+      .scale(glm::vec3(sphere_radius))
+      .translate({w_mid, h_mid, -d_mid});
+
+    (*object2)
+      .scale(glm::vec3(10.0f))
+      .translate(random_point_inside_sphere())
+      .translate({w_mid, h_mid, -d_mid});
+
+    (*object3)
+      .scale(glm::vec3(0.5f))
+      .rotate(90.0f, {1, 0, 0})
+      .translate(random_point_inside_sphere())
+      .translate({w_mid, h_mid, -d_mid});
+
+    scene->add_object(std::move(object1), properties1);
+    scene->add_object(std::move(object2), properties2);
+    scene->add_object(std::move(object3), properties3);
     
     return scene;
   }

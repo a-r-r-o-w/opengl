@@ -8,6 +8,13 @@
 
 namespace gl {
 
+  struct object_properties {
+    glm::vec3 m_velocity;
+
+    object_properties (const glm::vec3& = {0, 0, 0});
+    ~object_properties ();
+  };
+
   class object {
     protected:
       std::string m_name;
@@ -36,6 +43,10 @@ namespace gl {
       object& translate (const glm::vec3&);
       object& rotate (f32, const glm::vec3&);
       object& scale (const glm::vec3&);
+
+      const glm::mat4& get_translate () const;
+      const glm::mat4& get_rotate () const;
+      const glm::mat4& get_scale () const;
 
       glm::mat4 get_model () const;
       const std::vector <glm::vec3>& get_vertices () const;
