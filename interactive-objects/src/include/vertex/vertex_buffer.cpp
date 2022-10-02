@@ -9,7 +9,7 @@ namespace gl {
     : m_id (0) {
     glGenBuffers(1, &m_id);
     bind();
-    glBufferData(GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW);
   }
 
   vertex_buffer::~vertex_buffer () {
