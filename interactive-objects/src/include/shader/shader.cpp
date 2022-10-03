@@ -102,4 +102,9 @@ namespace gl {
     glUniformMatrix4fv(get_uniform_location(name), 1, GL_FALSE, &value[0][0]);
   }
 
+  template <>
+  void shader_program::set_uniform <bool> (const std::string &name, const bool& value) {
+    glUniform1i(get_uniform_location(name), value);
+  }
+
 } // namespace gl
