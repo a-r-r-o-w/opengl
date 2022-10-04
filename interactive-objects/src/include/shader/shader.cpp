@@ -93,18 +93,23 @@ namespace gl {
   }
 
   template <>
-  void shader_program::set_uniform <glm::vec4> (const std::string &name, const glm::vec4& value) {
+  void shader_program::set_uniform <bool> (const std::string &name, const bool &value) {
+    glUniform1i(get_uniform_location(name), value);
+  }
+
+  template <>
+  void shader_program::set_uniform <f32> (const std::string &name, const f32 &value) {
+    glUniform1f(get_uniform_location(name), value);
+  }
+
+  template <>
+  void shader_program::set_uniform <glm::vec4> (const std::string &name, const glm::vec4 &value) {
     glUniform4f(get_uniform_location(name), value.x, value.y, value.z, value.w);
   }
 
   template <>
-  void shader_program::set_uniform <glm::mat4> (const std::string &name, const glm::mat4& value) {
+  void shader_program::set_uniform <glm::mat4> (const std::string &name, const glm::mat4 &value) {
     glUniformMatrix4fv(get_uniform_location(name), 1, GL_FALSE, &value[0][0]);
-  }
-
-  template <>
-  void shader_program::set_uniform <bool> (const std::string &name, const bool& value) {
-    glUniform1i(get_uniform_location(name), value);
   }
 
 } // namespace gl

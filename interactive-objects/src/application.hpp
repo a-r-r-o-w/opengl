@@ -41,7 +41,12 @@ namespace gl {
       static constexpr f32 m_grid_expanse_factor = 5.0f;
       std::unique_ptr <object> m_grid;
       f32 m_grid_spacing;
+      
       bool m_display_grid;
+      bool m_display_outline;
+      bool m_display_wireframe;
+      bool m_display_depth_test;
+      bool m_display_smooth_lines;
 
       // 348 is the maximum value of a GLFW_KEY_<XXXX>
       static constexpr u32 m_key_count = 349;

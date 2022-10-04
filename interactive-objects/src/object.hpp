@@ -8,18 +8,14 @@
 
 namespace gl {
 
-  struct object_properties {
-    glm::vec3 m_velocity;
-
-    object_properties (const glm::vec3& = {0, 0, 0});
-    ~object_properties ();
-  };
-
   class object {
-    protected:
+    private:
       std::string m_name;
       std::vector <glm::vec3> m_vertices;
       std::vector <u32> m_indices;
+
+      glm::vec3 m_velocity;
+      f32 m_blend;
 
       glm::mat4 m_translate;
       glm::mat4 m_rotate;
@@ -29,12 +25,15 @@ namespace gl {
       vertex_buffer_layout m_vertex_buffer_layout;
       std::unique_ptr <index_buffer> m_index_buffer;
       std::unique_ptr <vertex_buffer> m_vertex_buffer;
+
+    public:
+      bool m_should_render;
     
     public:
       object (const std::string&);
       ~object ();
 
-      object& add_vertex (const glm::vec3&);
+      object& add_vertex (const glm::vec3&, const glm::vec3&);
       object& add_index  (u32);
 
       object& clear ();
@@ -44,11 +43,18 @@ namespace gl {
       object& rotate (f32, const glm::vec3&);
       object& scale (const glm::vec3&);
 
+      object& set_velocity (const glm::vec3&);
+      object& set_render (bool);
+      object& set_blend (f32);
+
+      const glm::vec3& get_velocity () const;
+
       const glm::mat4& get_translate () const;
       const glm::mat4& get_rotate () const;
       const glm::mat4& get_scale () const;
 
       glm::mat4 get_model () const;
+      f32 get_blend () const;
       const std::vector <glm::vec3>& get_vertices () const;
       const std::vector <u32>& get_indices () const;
 

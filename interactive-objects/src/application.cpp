@@ -1,4 +1,6 @@
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <random>
 
 #include <glad/glad.h>
@@ -13,9 +15,12 @@
 
 #include "application.hpp"
 #include "scene.hpp"
-#include "utils.hpp"
 
 namespace gl {
+
+  static std::random_device rd;
+  static std::mt19937 mt (rd());
+  static std::uniform_real_distribution <> rng (-1, 1);
 
   static std::unique_ptr <gl::scene> create_scene_none ();
   static std::unique_ptr <gl::scene> create_scene_triangle (u32, u32, u32);
@@ -29,8 +34,9 @@ namespace gl {
   static std::unique_ptr <gl::scene> create_scene_planetary_gear (u32, u32, u32);
   static std::unique_ptr <gl::scene> create_scene_assignment (u32, u32, u32);
 
-  static glm::vec3 circle_rotate_point (glm::vec3, glm::vec3, f32);
   static void circle_generate (object&, u32, u32, u32, u32);
+
+  static std::unique_ptr <gl::object> load_blender_obj (const std::string&, const std::string&, const std::vector <glm::vec3>&);
 
   application::application (u32 width, u32 height, u32 depth, const std::string &name)
     : m_width (width),
@@ -50,6 +56,10 @@ namespace gl {
       m_grid (nullptr),
       m_grid_spacing (25.0f),
       m_display_grid (true),
+      m_display_outline (false),
+      m_display_wireframe (false),
+      m_display_depth_test (true),
+      m_display_smooth_lines (true),
       m_key_pressed (m_key_count),
       m_scenes (),
       m_scene_index (1)
@@ -80,6 +90,8 @@ namespace gl {
     glfwSwapInterval(1);
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     set_callbacks();
     set_shaders();
@@ -149,7 +161,7 @@ namespace gl {
     if (io.WantCaptureMouse)
       return;
     
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
       if (action == GLFW_PRESS) {
         glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         m_should_camera_move = true;
@@ -223,10 +235,17 @@ namespace gl {
     m_shader_program->set_uniform("u_model", model);
     m_shader_program->set_uniform("u_view", view);
     m_shader_program->set_uniform("u_projection", projection);
+    m_shader_program->set_uniform("u_color", glm::vec4 {0, 0, 0, 1});
+    m_shader_program->set_uniform("u_use_vertex_color", true);
+
+    (m_display_depth_test ? glEnable : glDisable)(GL_DEPTH_TEST);
+    (m_display_smooth_lines ? glEnable: glDisable)(GL_LINE_SMOOTH);
 
     if (m_display_grid) {
-    m_shader_program->set_uniform("u_color", glm::vec4(0.8f, 0.8f, 0.8f, 0.0f));
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+      
       set_draw_mode(draw_mode::line);
+      m_shader_program->set_uniform("u_blend", m_grid->get_blend());
       draw_elements(
         m_grid->get_vertex_array(),
         m_grid->get_index_buffer(),
@@ -234,24 +253,70 @@ namespace gl {
       );
     }
 
-    m_shader_program->set_uniform("u_color", glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
     set_draw_mode(draw_mode::triangle);
 
     if (m_scene_index >= 0 and m_scene_index < (i32)m_scenes.size()) {
       auto &scene = *m_scenes[m_scene_index];
 
-      for (auto &o: scene.get_objects()) {
-        model = o->get_model();
-        m_shader_program->set_uniform("u_model", model);
-        draw_elements(
-          o->get_vertex_array(),
-          o->get_index_buffer(),
-          *m_shader_program
-        );
+      if (m_display_wireframe) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+        for (auto &o: scene.get_objects()) {
+          model = o->get_model();
+          m_shader_program->set_uniform("u_model", model);
+          draw_elements(
+            o->get_vertex_array(),
+            o->get_index_buffer(),
+            *m_shader_program
+          );
+        }
+      }
+      else {
+        if (m_display_outline) {
+          glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+          m_shader_program->set_uniform("u_use_vertex_color", false);
+          glLineWidth(2.5f);
+
+          for (auto &o: scene.get_objects()) {
+            if (!o->m_should_render)
+              continue;
+            
+            model = o->get_model();
+            m_shader_program->set_uniform("u_model", model);
+
+            draw_elements(
+              o->get_vertex_array(),
+              o->get_index_buffer(),
+              *m_shader_program
+            );
+          }
+
+          glLineWidth(1.0f);
+          m_shader_program->set_uniform("u_use_vertex_color", true);
+        }
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+        for (auto &o: scene.get_objects()) {
+          if (!o->m_should_render)
+            continue;
+          
+          model = o->get_model();
+          m_shader_program->set_uniform("u_model", model);
+          m_shader_program->set_uniform("u_blend", o->get_blend());
+
+          draw_elements(
+            o->get_vertex_array(),
+            o->get_index_buffer(),
+            *m_shader_program
+          );
+        }
       }
 
       scene.on_update(m_delta_time);
     }
+
     imgui_update();
 
     m_running = !glfwWindowShouldClose(m_window);
@@ -279,9 +344,10 @@ namespace gl {
     ImGui::ShowDemoWindow();
 
     if (ImGui::CollapsingHeader("Application", ImGuiTreeNodeFlags_DefaultOpen)) {
-      {
-        ImGui::Text("Scene");
-        
+      ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+
+      if (ImGui::TreeNode("Scene")) {
+      
         std::vector <const char*> names;
         
         for (i32 i = 0; i < (i32)m_scenes.size(); ++i)
@@ -289,28 +355,39 @@ namespace gl {
         
         ImGui::Combo("##", &m_scene_index, names.data(), names.size());
 
-        static bool wireframe = false;
-        static bool depthtest = true;
-
-        bool previous_wireframe_value = wireframe;
-        bool previous_depthtest_value = depthtest;
-
-        ImGui::Checkbox("Wireframe", &wireframe);
-        ImGui::Checkbox("Depth Test", &depthtest);
-        ImGui::Checkbox("Grid", &m_display_grid);
-
-        if (previous_wireframe_value != wireframe)
-          glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
-        
-        if (previous_depthtest_value != depthtest)
-          (depthtest ? glEnable : glDisable)(GL_DEPTH_TEST);
+        ImGui::TreePop();
       }
 
       ImGui::Separator();
+      ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 
-      {
-        ImGui::Text("Camera");
+      if (ImGui::TreeNode("Rendered Objects")) {
+        if (m_scene_index >= 0 and m_scene_index < (i32)m_scenes.size()) {
+          auto &scene = *m_scenes[m_scene_index];
 
+          for (auto &o: scene.get_objects())
+            ImGui::Checkbox(o->get_name().c_str(), &o->m_should_render);
+        }
+
+        ImGui::TreePop();
+      }
+
+      ImGui::Separator();
+      ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+
+      if (ImGui::TreeNode("General Settings")) {
+        ImGui::Checkbox("Grid", &m_display_grid);
+        ImGui::Checkbox("Outline", &m_display_outline);
+        ImGui::Checkbox("Wireframe", &m_display_wireframe);
+        ImGui::Checkbox("Depth Test", &m_display_depth_test);
+
+        ImGui::TreePop();
+      }
+
+      ImGui::Separator();
+      ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+      
+      if (ImGui::TreeNode("Camera")) {
         auto &position = m_camera.get_position();
 
         ImGui::Text("  Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
@@ -318,14 +395,17 @@ namespace gl {
         ImGui::Text("       Yaw: %.2f", m_camera.get_yaw());
         ImGui::Text("     Pitch: %.2f", m_camera.get_pitch());
         ImGui::Text("      Roll: %.2f", m_camera.get_roll());
+
+        ImGui::TreePop();
       }
     }
-    
+
     ImGui::Separator();
 
     ImGui::Text("Last render %.3f ms", m_delta_time * 1000);
     ImGui::Text("FPS %.3f", ImGui::GetIO().Framerate);
     ImGui::Text("Press ESC to exit");
+
     ImGui::End();
 
     ImGui::Render();
@@ -335,6 +415,13 @@ namespace gl {
   void application::keypress_update () {
     if (m_key_pressed[GLFW_KEY_ESCAPE]) {
       glfwSetWindowShouldClose(m_window, GL_TRUE);
+      return;
+    }
+
+    if (m_key_pressed[GLFW_KEY_TAB]) {
+      ++m_scene_index;
+      m_scene_index %= m_scenes.size();
+      m_key_pressed[GLFW_KEY_TAB] = false;
       return;
     }
 
@@ -407,6 +494,8 @@ namespace gl {
   void application::create_grid () {
     m_grid.reset(new object("Grid"));
 
+    static glm::vec3 grid_color (0.8f, 0.8f, 0.8f);
+
     i32 len = std::max(m_width, m_depth);
     f32 h_mid = (f32)m_height / 2;
 
@@ -418,15 +507,15 @@ namespace gl {
     u32 index = 0;
 
     for (f32 row = back; row < front; row += m_grid_spacing) {
-      m_grid->add_vertex({left, h_mid, row});
-      m_grid->add_vertex({right, h_mid, row});
+      m_grid->add_vertex({left, h_mid, row}, grid_color);
+      m_grid->add_vertex({right, h_mid, row}, grid_color);
       m_grid->add_index(index++);
       m_grid->add_index(index++);
     }
 
     for (f32 col = left; col < right; col += m_grid_spacing) {
-      m_grid->add_vertex({col, h_mid, back});
-      m_grid->add_vertex({col, h_mid, front});
+      m_grid->add_vertex({col, h_mid, back}, grid_color);
+      m_grid->add_vertex({col, h_mid, front}, grid_color);
       m_grid->add_index(index++);
       m_grid->add_index(index++);
     }
@@ -445,7 +534,7 @@ namespace gl {
     m_scenes.emplace_back(create_scene_suzanne(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_klein_bottle(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_planetary_gear(m_width, m_height, m_depth));
-    m_scenes.emplace_back(create_scene_assignment(m_width, m_height, m_depth));
+    // m_scenes.emplace_back(create_scene_assignment(m_width, m_height, m_depth));
   }
 
   static std::unique_ptr <gl::scene> create_scene_none () {
@@ -468,18 +557,17 @@ namespace gl {
 
     auto scene = std::make_unique <gl::scene> ("Triangle", scene_properties());
     auto object = std::make_unique <gl::object> ("Triangle");
-    auto properties = gl::object_properties({0, 0, 0});
 
     (*object)
-      .add_vertex({left, bottom, -d_mid})
-      .add_vertex({right, bottom, -d_mid})
-      .add_vertex({w_mid, top, -d_mid})
+      .add_vertex({left, bottom, -d_mid}, {1, 0, 0})
+      .add_vertex({right, bottom, -d_mid}, {0, 1, 0})
+      .add_vertex({w_mid, top, -d_mid}, {0, 0, 1})
       .add_index(0)
       .add_index(1)
       .add_index(2)
       .load();
     
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
 
     return scene;
   }
@@ -499,18 +587,17 @@ namespace gl {
 
     auto scene = std::make_unique <gl::scene> ("Rectangle", scene_properties());
     auto object = std::make_unique <gl::object> ("Rectangle");
-    auto properties = gl::object_properties({0, 0, 0});
 
     (*object)
-      .add_vertex({left, bottom, -d_mid})
-      .add_vertex({right, bottom, -d_mid})
-      .add_vertex({right, top, -d_mid})
-      .add_vertex({left, top, -d_mid})
+      .add_vertex({left, bottom, -d_mid}, {0, 0, 0})
+      .add_vertex({right, bottom, -d_mid}, {1, 1, 1})
+      .add_vertex({right, top, -d_mid}, {0, 0, 0})
+      .add_vertex({left, top, -d_mid}, {1, 1, 1})
       .add_index(0).add_index(1).add_index(2)
       .add_index(2).add_index(3).add_index(0)
       .load();
     
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
 
     return scene;
   }
@@ -532,17 +619,21 @@ namespace gl {
 
     auto scene = std::make_unique <gl::scene> ("Cuboid", scene_properties());
     auto object = std::make_unique <gl::object> ("Cuboid");
-    auto properties = gl::object_properties({0, 0, 0});
+
+    glm::vec3 colors[] = {
+      {0.2, 0.8, 0.8},
+      {0.8, 0.2, 0.8}
+    };
 
     (*object)
-      .add_vertex({left, bottom, -d_mid})
-      .add_vertex({right, bottom, -d_mid})
-      .add_vertex({right, top, -d_mid})
-      .add_vertex({left, top, -d_mid})
-      .add_vertex({left, bottom, back})
-      .add_vertex({right, bottom, back})
-      .add_vertex({right, top, back})
-      .add_vertex({left, top, back})
+      .add_vertex({left, bottom, -d_mid}, colors[0])
+      .add_vertex({right, bottom, -d_mid}, colors[1])
+      .add_vertex({right, top, -d_mid}, colors[0])
+      .add_vertex({left, top, -d_mid}, colors[1])
+      .add_vertex({left, bottom, back}, colors[0])
+      .add_vertex({right, bottom, back}, colors[1])
+      .add_vertex({right, top, back}, colors[0])
+      .add_vertex({left, top, back}, colors[1])
       .add_index(0).add_index(1).add_index(2)
       .add_index(2).add_index(3).add_index(0)
       .add_index(1).add_index(5).add_index(6)
@@ -557,7 +648,7 @@ namespace gl {
       .add_index(6).add_index(7).add_index(3)
       .load();
     
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
 
     return scene;
   }
@@ -565,12 +656,11 @@ namespace gl {
   static std::unique_ptr <gl::scene> create_scene_circle (u32 width, u32 height, u32 depth) {
     auto scene = std::make_unique <gl::scene> ("Circle", scene_properties());
     auto object = std::make_unique <gl::object> ("Circle");
-    auto properties = gl::object_properties({0, 0, 0});
 
-    circle_generate(*object, 10, width, height, depth);
+    circle_generate(*object, 20, width, height, depth);
     object->load();
     
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
 
     return scene;
   }
@@ -580,15 +670,22 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
+    static std::vector <glm::vec3> colors = {
+      {0.8f, 0.4f, 0.2f},
+      {0.8f, 0.5f, 0.2f},
+      {0.9f, 0.6f, 0.2f},
+      {1.0f, 0.7f, 0.3f},
+      {1.0f, 0.8f, 0.4f}
+    };
+
     auto scene = std::make_unique <gl::scene> ("Sphere", scene_properties());
-    auto object = load_blender_obj("../res/sphere.obj", "Sphere");
-    auto properties = gl::object_properties({0, 0, 0});
+    auto object = load_blender_obj("../res/sphere.obj", "Sphere", colors);
 
     (*object)
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
     
     return scene;
   }
@@ -598,15 +695,23 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
+    std::vector <glm::vec3> colors;
+
+    for (i32 i = 0; i < 10; ++i) {
+      glm::vec3 color (198.0f + 2 * i, 137.0f + 2 * i, 88.0f - 2 * i);
+      color /= 256.0f;
+      colors.push_back(color);
+    }
+
     auto scene = std::make_unique <gl::scene> ("Torus", scene_properties());
-    auto object = load_blender_obj("../res/torus.obj", "Torus");
-    auto properties = gl::object_properties({0, 0, 0});
+    auto object = load_blender_obj("../res/torus.obj", "Torus", colors);
 
     (*object)
       .scale(glm::vec3(100.0f))
+      .rotate(90.f, {1, 0, 0})
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
     
     return scene;
   }
@@ -616,15 +721,23 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
+    std::vector <glm::vec3> colors;
+
+    for (i32 i = 0; i < 256; ++i) {
+      glm::vec3 color (rng(mt), rng(mt), rng(mt));
+      color += 1.0f;
+      color /= 2.0f;
+      colors.push_back(color);
+    }
+
     auto scene = std::make_unique <gl::scene> ("Suzanne", scene_properties());
-    auto object = load_blender_obj("../res/suzanne.obj", "Suzanne");
-    auto properties = gl::object_properties({0, 0, 0});
+    auto object = load_blender_obj("../res/suzanne.obj", "Suzanne", colors);
     
     (*object)
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
     
     return scene;
   }
@@ -634,15 +747,23 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
+    std::vector <glm::vec3> colors;
+
+    for (i32 i = 0; i < 20; ++i) {
+      glm::vec3 color (200.0f - 2 * i, 200.0f - 2 * i, 210.0f + 2 * i);
+      color /= 256.0f;
+      colors.push_back(color);
+    }
+
     auto scene = std::make_unique <gl::scene> ("Klein Bottle", scene_properties());
-    auto object = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle");
-    auto properties = gl::object_properties({0, 0, 0});
+    auto object = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle", colors);
     
     (*object)
       .scale(glm::vec3(100.0f))
-      .translate({w_mid, h_mid, -d_mid});
+      .translate({w_mid, h_mid, -d_mid})
+      .set_blend(0.5f);
 
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object));
     
     return scene;
   }
@@ -652,101 +773,116 @@ namespace gl {
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
 
-    auto scene = std::make_unique <gl::scene> ("Planetary Gear", scene_properties());
-    auto object = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear");
-    auto properties = gl::object_properties({0, 0, 0});
+    std::vector <glm::vec3> colors;
 
-    (*object)
+    for (i32 i = 0; i < 20; ++i) {
+      glm::vec3 color (200.0f - i, 200.0f - i, 200.0f - i);
+      color /= 256.0f;
+      colors.push_back(color);
+    }
+
+    auto scene = std::make_unique <gl::scene> ("Planetary Gear", scene_properties());
+
+    auto object1 = load_blender_obj("../res/planetary-big.obj", "Big Gear", colors);
+    auto object21 = load_blender_obj("../res/planetary-medium.obj", "Medium Gear 1", colors);
+    auto object22 = load_blender_obj("../res/planetary-medium.obj", "Medium Gear 2", colors);
+    auto object23 = load_blender_obj("../res/planetary-medium.obj", "Medium Gear 3", colors);
+    auto object3 = load_blender_obj("../res/planetary-small.obj", "Small Gear", colors);
+
+    for (auto i: object1->get_vertices())
+      std::cout << i.x << ' ' << i.y << '\n';
+
+    (*object1)
+      .scale(glm::vec3(2.0f))
+      .rotate(90.0f, {1, 0, 0})
+      .translate({w_mid, h_mid, -d_mid});
+    (*object21)
+      .scale(glm::vec3(2.0f))
+      .rotate(90.0f, {1, 0, 0})
+      .translate({w_mid, h_mid, -d_mid});
+    (*object22)
+      .scale(glm::vec3(2.0f))
+      .rotate(90.0f, {1, 0, 0})
+      .translate({w_mid, h_mid, -d_mid});
+    (*object23)
+      .scale(glm::vec3(2.0f))
+      .rotate(90.0f, {1, 0, 0})
+      .translate({w_mid, h_mid, -d_mid});
+    (*object3)
       .scale(glm::vec3(2.0f))
       .rotate(90.0f, {1, 0, 0})
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object), properties);
+    scene->add_object(std::move(object1));
+    scene->add_object(std::move(object21));
+    scene->add_object(std::move(object22));
+    scene->add_object(std::move(object23));
+    scene->add_object(std::move(object3));
     
     return scene;
   }
 
-  static std::unique_ptr <gl::scene> create_scene_assignment (u32 width, u32 height, u32 depth) {
-    f32 w_mid = (f32)width / 2;
-    f32 h_mid = (f32)height / 2;
-    f32 d_mid = (f32)depth / 2;
+  // static std::unique_ptr <gl::scene> create_scene_assignment (u32 width, u32 height, u32 depth) {
+  //   f32 w_mid = (f32)width / 2;
+  //   f32 h_mid = (f32)height / 2;
+  //   f32 d_mid = (f32)depth / 2;
     
-    const f32 sphere_radius = 200.0f;
-    const f32 velocity_factor = 500.0f;
+  //   const f32 sphere_radius = 200.0f;
+  //   const f32 velocity_factor = 500.0f;
 
-    static std::random_device rd;
-    static std::mt19937 mt (rd());
-    static std::uniform_real_distribution <> rng (-1, 1);
+  //   static auto random_point_inside_sphere = [&] () -> glm::vec3 {
+  //     auto u = std::cbrt(rng(mt));
+  //     auto r = sphere_radius * u;
+  //     auto point = glm::vec3(rng(mt), rng(mt), rng(mt));
+  //     point = glm::normalize(point);
+  //     point *= r;
+  //     return point;
+  //   };
 
-    static auto random_point_inside_sphere = [&] () -> glm::vec3 {
-      auto u = std::cbrt(rng(mt));
-      auto r = sphere_radius * u;
-      auto point = glm::vec3(rng(mt), rng(mt), rng(mt));
-      point = glm::normalize(point);
-      point *= r;
-      return point;
-    };
+  //   static auto random_velocity = [&] () -> glm::vec3 {
+  //     auto velocity = glm::vec3(rng(mt), rng(mt), rng(mt));
+  //     velocity *= velocity_factor;
+  //     return velocity;
+  //   };
 
-    static auto random_velocity = [&] () -> glm::vec3 {
-      auto velocity = glm::vec3(rng(mt), rng(mt), rng(mt));
-      velocity *= velocity_factor;
-      return velocity;
-    };
+  //   auto scene = std::make_unique <gl::scene> (
+  //     "Assignment",
+  //     scene_properties(
+  //       w_mid - sphere_radius, w_mid + sphere_radius,
+  //       h_mid + sphere_radius, h_mid - sphere_radius,
+  //       d_mid + sphere_radius, d_mid - sphere_radius
+  //     )
+  //   );
 
-    auto scene = std::make_unique <gl::scene> (
-      "Assignment",
-      scene_properties(
-        w_mid - sphere_radius, w_mid + sphere_radius,
-        h_mid + sphere_radius, h_mid - sphere_radius,
-        d_mid + sphere_radius, d_mid - sphere_radius
-      )
-    );
+  //   auto object1 = load_blender_obj("../res/sphere.obj", "Sphere");
+  //   auto object2 = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle");
+  //   auto object3 = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear");
 
-    auto object1 = load_blender_obj("../res/sphere.obj", "Sphere");
-    auto object2 = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle");
-    auto object3 = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear");
+  //   auto properties1 = gl::object_properties({0, 0, 0});
+  //   auto properties2 = gl::object_properties(random_velocity());
+  //   auto properties3 = gl::object_properties(random_velocity());
 
-    auto properties1 = gl::object_properties({0, 0, 0});
-    auto properties2 = gl::object_properties(random_velocity());
-    auto properties3 = gl::object_properties(random_velocity());
+  //   (*object1)
+  //     .scale(glm::vec3(sphere_radius))
+  //     .translate({w_mid, h_mid, -d_mid});
 
-    (*object1)
-      .scale(glm::vec3(sphere_radius))
-      .translate({w_mid, h_mid, -d_mid});
+  //   (*object2)
+  //     .scale(glm::vec3(10.0f))
+  //     .translate(random_point_inside_sphere())
+  //     .translate({w_mid, h_mid, -d_mid});
 
-    (*object2)
-      .scale(glm::vec3(10.0f))
-      .translate(random_point_inside_sphere())
-      .translate({w_mid, h_mid, -d_mid});
+  //   (*object3)
+  //     .scale(glm::vec3(0.5f))
+  //     .rotate(90.0f, {1, 0, 0})
+  //     .translate(random_point_inside_sphere())
+  //     .translate({w_mid, h_mid, -d_mid});
 
-    (*object3)
-      .scale(glm::vec3(0.5f))
-      .rotate(90.0f, {1, 0, 0})
-      .translate(random_point_inside_sphere())
-      .translate({w_mid, h_mid, -d_mid});
-
-    scene->add_object(std::move(object1), properties1);
-    scene->add_object(std::move(object2), properties2);
-    scene->add_object(std::move(object3), properties3);
+  //   scene->add_object(std::move(object1), properties1);
+  //   scene->add_object(std::move(object2), properties2);
+  //   scene->add_object(std::move(object3), properties3);
     
-    return scene;
-  }
-
-  glm::vec3 circle_rotate_point (glm::vec3 center, glm::vec3 point, f32 angle) {
-    f32 s = glm::sin(angle);
-    f32 c = glm::cos(angle);
-
-    point.x -= center.x;
-    point.y -= center.y;
-
-    f32 xnew = point.x * c - point.y * s;
-    f32 ynew = point.x * s + point.y * c;
-
-    point.x = xnew + center.x;
-    point.y = ynew + center.y;
-
-    return point;
-  }
+  //   return scene;
+  // }
 
   void circle_generate (object& object, u32 points, u32 width, u32 height, u32 depth) {
     f32 w_mid = (f32)width / 2;
@@ -754,25 +890,93 @@ namespace gl {
     f32 d_mid = (f32)depth / 2;
     f32 angle = glm::radians(360.0f / points);
 
+    static auto rotate_point = [] (glm::vec3 center, glm::vec3 point, f32 angle) -> glm::vec3 {
+      f32 s = glm::sin(angle);
+      f32 c = glm::cos(angle);
+
+      point.x -= center.x;
+      point.y -= center.y;
+
+      f32 xnew = point.x * c - point.y * s;
+      f32 ynew = point.x * s + point.y * c;
+
+      point.x = xnew + center.x;
+      point.y = ynew + center.y;
+
+      return point;
+    };
+
     object.clear();
 
-    object.add_vertex({0, 0, 0});
-    object.add_vertex({1, 0, 0});
+    static glm::vec3 colors[] = {
+      {0.8, 0.2, 0.2},
+      {0.8, 0.4, 0.1}
+    };
+
+    object.add_vertex({0, 0, 0}, {1, 1, 1});
+    object.add_vertex({1, 0, 0}, colors[1]);
 
     for (i32 i = 0; i < (i32)points; ++i) {
-      object.add_vertex(circle_rotate_point({0, 0, 0}, object.get_vertices().back(), angle));
-      object.add_index(i);
-      object.add_index(i + 1);
+      object.add_vertex(rotate_point({0, 0, 0}, object.get_vertices()[2 * i + 2], angle), colors[i % 2]);
       object.add_index(0);
+      object.add_index(i + 1);
+      object.add_index(i + 2);
     }
-
-    object.add_index(object.get_vertices().size() - 2);
-    object.add_index(object.get_vertices().size() - 1);
-    object.add_index(0);
 
     object
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
+  }
+
+  std::unique_ptr <gl::object> load_blender_obj (
+    const std::string &filepath, const std::string &name,
+    const std::vector <glm::vec3>& colors
+  ) {
+    std::ifstream file (filepath);
+    std::string line;
+    std::stringstream stream;
+
+    auto object = std::make_unique <gl::object> (name.c_str());
+    u32 size = colors.size();
+
+    while (not file.eof()) {
+      std::getline(file, line);
+      
+      if (line.starts_with("v ")) {
+        stream << line.substr(2);
+        
+        glm::vec3 v;
+        stream >> v.x >> v.y >> v.z;
+        
+        object->add_vertex(v, colors[std::floor((rng(mt) + 1) * size / 2)]);
+      }
+      else if (line.starts_with("f ")) {
+        i32 x, y, z;
+
+        stream << line.substr(2);
+        
+        stream >> line;
+        x = std::stoi(line.substr(0, line.find_first_of('/'))) - 1;
+
+        stream >> line;
+        y = std::stoi(line.substr(0, line.find_first_of('/'))) - 1;
+
+        stream >> line;
+        z = std::stoi(line.substr(0, line.find_first_of('/'))) - 1;
+
+        (*object)
+          .add_index(x)
+          .add_index(y)
+          .add_index(z);
+      }
+
+      stream.clear();
+    }
+
+    file.close();
+    object->load();
+
+    return object;
   }
 
 } // namespace gl

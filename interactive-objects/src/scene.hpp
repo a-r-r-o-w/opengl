@@ -29,16 +29,16 @@ namespace gl {
       scene_properties m_scene_properties;
       u32 m_object_count;
       std::vector <std::unique_ptr <object>> m_objects;
-      std::vector <object_properties> m_object_properties;
 
     public:
       scene (const std::string&, const scene_properties&);
       ~scene ();
 
-      void add_object (std::unique_ptr <object>&&, const object_properties&);
+      void add_object (std::unique_ptr <object>&&);
 
       void on_update (f32);
 
+      const scene_properties& get_properties () const;
       const std::vector <std::unique_ptr <object>>& get_objects () const;
       const std::string& get_name () const;
   };

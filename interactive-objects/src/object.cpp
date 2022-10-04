@@ -5,36 +5,32 @@
 #include <iostream>
 namespace gl {
 
-  object_properties::object_properties (const glm::vec3& v)
-    : m_velocity (v) {
-      
-  }
-
-  object_properties::~object_properties () {
-
-  }
-
   object::object (const std::string &name)
     : m_name (name),
       m_vertices (),
       m_indices (),
+      m_velocity (0.0f),
+      m_blend (1.0f),
       m_translate(glm::mat4(1.0f)),
       m_rotate(glm::mat4(1.0f)),
       m_scale(glm::mat4(1.0f)),
       m_vertex_array (),
       m_vertex_buffer_layout (),
       m_index_buffer (nullptr),
-      m_vertex_buffer (nullptr)
+      m_vertex_buffer (nullptr),
+      m_should_render (true)
     {
-      m_vertex_buffer_layout.push <f32> (3);
+      m_vertex_buffer_layout.push <f32> (3); // vertex
+      m_vertex_buffer_layout.push <f32> (3); // color
     }
 
   object::~object () {
 
   }
 
-  object& object::add_vertex (const glm::vec3 &v) {
-    m_vertices.push_back(v);
+  object& object::add_vertex (const glm::vec3 &vertex, const glm::vec3 &color) {
+    m_vertices.push_back(vertex);
+    m_vertices.push_back(color);
     return *this;
   }
 
@@ -76,6 +72,25 @@ namespace gl {
     return *this;
   }
 
+  object& object::set_velocity (const glm::vec3& v) {
+    m_velocity = v;
+    return *this;
+  }
+
+  object& object::set_render (bool should_render) {
+    m_should_render = should_render;
+    return *this;
+  }
+
+  object& object::set_blend (f32 blend) {
+    m_blend = blend;
+    return *this;
+  }
+
+  const glm::vec3& object::get_velocity () const {
+    return m_velocity;
+  }
+
   const glm::mat4& object::get_translate () const {
     return m_translate;
   }
@@ -83,13 +98,17 @@ namespace gl {
   const glm::mat4& object::get_rotate () const {
     return m_rotate;
   }
-  
+
   const glm::mat4& object::get_scale () const {
     return m_scale;
   }
 
   glm::mat4 object::get_model () const {
     return m_translate * m_rotate * m_scale;
+  }
+
+  f32 object::get_blend () const {
+    return m_blend;
   }
 
   const std::vector <glm::vec3>& object::get_vertices () const {

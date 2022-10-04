@@ -1,5 +1,5 @@
 #include "scene.hpp"
-
+#include <iostream>
 namespace gl {
 
   scene_properties::scene_properties (f32 l, f32 r, f32 u, f32 d, f32 f, f32 b)
@@ -20,8 +20,7 @@ namespace gl {
     : m_name (name),
       m_scene_properties (properties),
       m_object_count (0),
-      m_objects (),
-      m_object_properties () {
+      m_objects () {
 
   }
 
@@ -29,18 +28,16 @@ namespace gl {
 
   }
 
-  void scene::add_object (std::unique_ptr <object> &&o, const object_properties &p) {
+  void scene::add_object (std::unique_ptr <object> &&o) {
     m_objects.emplace_back(std::move(o));
-    m_object_properties.emplace_back(p);
     ++m_object_count;
   }
 
   void scene::on_update (f32 deltatime) {
     for (u32 i = 0; i < m_object_count; ++i) {
       auto &object = *m_objects[i];
-      auto &properties = m_object_properties[i];
       auto translation = glm::vec3(object.get_translate()[3]);
-      glm::vec3 new_velocity = properties.m_velocity;
+      auto new_velocity = object.get_velocity();
 
       if ((translation.x > m_scene_properties.m_right_bound) or
           (translation.x < m_scene_properties.m_left_bound))
@@ -54,10 +51,13 @@ namespace gl {
           (translation.z < m_scene_properties.m_back_bound))
         new_velocity.z = -new_velocity.z;
       
-      properties.m_velocity = new_velocity;
-      
-      object.translate(properties.m_velocity * deltatime);
+      object.set_velocity(new_velocity);
+      object.translate(new_velocity * deltatime);
     }
+  }
+  
+  const scene_properties& scene::get_properties () const {
+    return m_scene_properties;  
   }
 
   const std::vector <std::unique_ptr <object>>& scene::get_objects () const {
