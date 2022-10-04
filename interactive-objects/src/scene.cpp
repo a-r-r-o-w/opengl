@@ -38,21 +38,43 @@ namespace gl {
       auto &object = *m_objects[i];
       auto translation = glm::vec3(object.get_translate()[3]);
       auto new_velocity = object.get_velocity();
+      auto &rotation_angles = object.get_rotation_angles();
 
       if ((translation.x > m_scene_properties.m_right_bound) or
-          (translation.x < m_scene_properties.m_left_bound))
+          (translation.x < m_scene_properties.m_left_bound)) {
         new_velocity.x = -new_velocity.x;
+        
+        if (translation.x > m_scene_properties.m_right_bound)
+          translation.x = m_scene_properties.m_right_bound;
+        else if (translation.x < m_scene_properties.m_left_bound)
+          translation.x = m_scene_properties.m_left_bound;
+      }
       
       if ((translation.y > m_scene_properties.m_up_bound) or
-          (translation.y < m_scene_properties.m_down_bound))
+          (translation.y < m_scene_properties.m_down_bound)) {
         new_velocity.y = -new_velocity.y;
+
+        if (translation.y > m_scene_properties.m_up_bound)
+          translation.y = m_scene_properties.m_up_bound;
+        else if (translation.y < m_scene_properties.m_down_bound)
+          translation.y = m_scene_properties.m_down_bound;
+      }
       
       if ((translation.z > m_scene_properties.m_front_bound) or
-          (translation.z < m_scene_properties.m_back_bound))
+          (translation.z < m_scene_properties.m_back_bound)) {
         new_velocity.z = -new_velocity.z;
+
+        if (translation.y > m_scene_properties.m_front_bound)
+          translation.z = m_scene_properties.m_front_bound;
+        else if (translation.y < m_scene_properties.m_back_bound)
+          translation.z = m_scene_properties.m_back_bound;
+      }
       
       object.set_velocity(new_velocity);
       object.translate(new_velocity * deltatime);
+      object.rotate(rotation_angles.x, {1, 0, 0});
+      object.rotate(rotation_angles.y, {0, 1, 0});
+      object.rotate(rotation_angles.z, {0, 0, 1});
     }
   }
   

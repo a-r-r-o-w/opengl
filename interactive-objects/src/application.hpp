@@ -55,6 +55,9 @@ namespace gl {
     public:
       std::vector <std::unique_ptr <scene>> m_scenes;
       i32 m_scene_index;
+      i32 m_selected_object_index;
+      glm::vec3 m_cached_velocity;
+      glm::vec3 m_cached_rotation_angles;
 
     public:
       application (u32, u32, u32, const std::string&);

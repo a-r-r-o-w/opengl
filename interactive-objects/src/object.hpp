@@ -15,6 +15,7 @@ namespace gl {
       std::vector <u32> m_indices;
 
       glm::vec3 m_velocity;
+      glm::vec3 m_rotation_angles;
       f32 m_blend;
 
       glm::mat4 m_translate;
@@ -44,10 +45,12 @@ namespace gl {
       object& scale (const glm::vec3&);
 
       object& set_velocity (const glm::vec3&);
+      object& set_rotation_angles (const glm::vec3&);
       object& set_render (bool);
       object& set_blend (f32);
 
       const glm::vec3& get_velocity () const;
+      const glm::vec3& get_rotation_angles () const;
 
       const glm::mat4& get_translate () const;
       const glm::mat4& get_rotate () const;
@@ -56,6 +59,7 @@ namespace gl {
       glm::mat4 get_model () const;
       f32 get_blend () const;
       const std::vector <glm::vec3>& get_vertices () const;
+      std::vector <glm::vec3>& get_vertices ();
       const std::vector <u32>& get_indices () const;
 
       const vertex_array& get_vertex_array () const;

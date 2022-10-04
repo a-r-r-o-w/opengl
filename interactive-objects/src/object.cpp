@@ -10,6 +10,7 @@ namespace gl {
       m_vertices (),
       m_indices (),
       m_velocity (0.0f),
+      m_rotation_angles (0.0f, 0.0f, 0.0f),
       m_blend (1.0f),
       m_translate(glm::mat4(1.0f)),
       m_rotate(glm::mat4(1.0f)),
@@ -19,10 +20,10 @@ namespace gl {
       m_index_buffer (nullptr),
       m_vertex_buffer (nullptr),
       m_should_render (true)
-    {
-      m_vertex_buffer_layout.push <f32> (3); // vertex
-      m_vertex_buffer_layout.push <f32> (3); // color
-    }
+  {
+    m_vertex_buffer_layout.push <f32> (3); // vertex
+    m_vertex_buffer_layout.push <f32> (3); // color
+  }
 
   object::~object () {
 
@@ -77,6 +78,11 @@ namespace gl {
     return *this;
   }
 
+  object& object::set_rotation_angles (const glm::vec3& v) {
+    m_rotation_angles = v;
+    return *this;
+  }
+
   object& object::set_render (bool should_render) {
     m_should_render = should_render;
     return *this;
@@ -89,6 +95,10 @@ namespace gl {
 
   const glm::vec3& object::get_velocity () const {
     return m_velocity;
+  }
+
+  const glm::vec3& object::get_rotation_angles () const {
+    return m_rotation_angles;
   }
 
   const glm::mat4& object::get_translate () const {
@@ -112,6 +122,10 @@ namespace gl {
   }
 
   const std::vector <glm::vec3>& object::get_vertices () const {
+    return m_vertices;
+  }
+
+  std::vector <glm::vec3>& object::get_vertices () {
     return m_vertices;
   }
 

@@ -35,6 +35,7 @@ namespace gl {
   static std::unique_ptr <gl::scene> create_scene_assignment (u32, u32, u32);
 
   static void circle_generate (object&, u32, u32, u32, u32);
+  static glm::vec3 rotate_point (glm::vec3, glm::vec3, f32);
 
   static std::unique_ptr <gl::object> load_blender_obj (const std::string&, const std::string&, const std::vector <glm::vec3>&);
 
@@ -62,7 +63,8 @@ namespace gl {
       m_display_smooth_lines (true),
       m_key_pressed (m_key_count),
       m_scenes (),
-      m_scene_index (1)
+      m_scene_index (1),
+      m_selected_object_index (-1)
   {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -90,6 +92,10 @@ namespace gl {
     glfwSwapInterval(1);
 
     glEnable(GL_DEPTH_TEST);
+
+    glEnable(GL_STENCIL_TEST);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -116,7 +122,7 @@ namespace gl {
   }
 
   void application::clear () const {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
   }
 
   void application::run () {
@@ -172,6 +178,36 @@ namespace gl {
         m_first_mouse = true;
       }
     }
+
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+      if (action == GLFW_PRESS) {
+        u32 stencil_index = 0;
+
+        glReadPixels(m_last_mouse_x, m_height - m_last_mouse_y, 1, 1, GL_STENCIL_INDEX, GL_INT, &stencil_index);
+
+        if (stencil_index >= 1 and stencil_index <= m_scenes[m_scene_index]->get_objects().size()) {
+          m_selected_object_index = stencil_index - 1;
+          
+          auto &o = m_scenes[m_scene_index]->get_objects()[m_selected_object_index];
+          
+          m_cached_velocity = o->get_velocity();
+          m_cached_rotation_angles = o->get_rotation_angles();
+          o->set_velocity({0, 0, 0});
+          o->set_rotation_angles({0, 0, 0});
+        }
+      }
+      else {
+        if (m_selected_object_index == -1)
+          return;
+        
+        auto &o = m_scenes[m_scene_index]->get_objects()[m_selected_object_index];
+        
+        o->set_velocity(m_cached_velocity);
+        o->set_rotation_angles(m_cached_rotation_angles);
+        
+        m_selected_object_index = -1;
+      }
+    }
   }
 
   void application::on_mousemove (
@@ -198,6 +234,11 @@ namespace gl {
 
     m_last_mouse_x = x_pos;
     m_last_mouse_y = y_pos;
+
+    if (m_selected_object_index != -1) {
+      auto &o = m_scenes[m_scene_index]->get_objects()[m_selected_object_index];
+      o->translate({x_offset / 2.0f, y_offset / 2.0f, 0.0f});
+    }
     
     if (m_should_camera_move)
       m_camera.on_mousemove(-x_offset, -y_offset);
@@ -240,6 +281,9 @@ namespace gl {
 
     (m_display_depth_test ? glEnable : glDisable)(GL_DEPTH_TEST);
     (m_display_smooth_lines ? glEnable: glDisable)(GL_LINE_SMOOTH);
+    
+    glStencilMask(0x00);
+    glStencilFunc(GL_ALWAYS, 0, 0xff);
 
     if (m_display_grid) {
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -262,6 +306,9 @@ namespace gl {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         for (auto &o: scene.get_objects()) {
+          if (!o->m_should_render)
+            continue;
+          
           model = o->get_model();
           m_shader_program->set_uniform("u_model", model);
           draw_elements(
@@ -270,6 +317,8 @@ namespace gl {
             *m_shader_program
           );
         }
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
       }
       else {
         if (m_display_outline) {
@@ -294,11 +343,11 @@ namespace gl {
 
           glLineWidth(1.0f);
           m_shader_program->set_uniform("u_use_vertex_color", true);
+          
+          glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-        for (auto &o: scene.get_objects()) {
+        for (i32 index = 0; auto &o: scene.get_objects()) {
           if (!o->m_should_render)
             continue;
           
@@ -306,11 +355,41 @@ namespace gl {
           m_shader_program->set_uniform("u_model", model);
           m_shader_program->set_uniform("u_blend", o->get_blend());
 
+          glStencilMask(0xff);
+          glStencilFunc(GL_ALWAYS, index + 1, 0xff);
+          
           draw_elements(
             o->get_vertex_array(),
             o->get_index_buffer(),
             *m_shader_program
           );
+
+          glStencilMask(0x00);
+          glStencilFunc(GL_ALWAYS, index + 1, 0xff);
+
+          if (m_selected_object_index == index) {
+            // std::cout << m_selected_object_index << '\n';
+            
+            const f32 scale_factor = 1.1f;
+            
+            m_shader_program->set_uniform("u_color", glm::vec4 {1.0f, 1.0f, 0.4f, 0.6f});
+            m_shader_program->set_uniform("u_use_vertex_color", false);
+            o->scale(glm::vec3(scale_factor));
+            model = o->get_model();
+            m_shader_program->set_uniform("u_model", model);
+
+            draw_elements(
+              o->get_vertex_array(),
+              o->get_index_buffer(),
+              *m_shader_program
+            );
+
+            o->scale(glm::vec3(1.0f / scale_factor));
+            m_shader_program->set_uniform("u_color", glm::vec4 {0, 0, 0, 1});
+            m_shader_program->set_uniform("u_use_vertex_color", true);
+          }
+
+          ++index;
         }
       }
 
@@ -534,7 +613,7 @@ namespace gl {
     m_scenes.emplace_back(create_scene_suzanne(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_klein_bottle(m_width, m_height, m_depth));
     m_scenes.emplace_back(create_scene_planetary_gear(m_width, m_height, m_depth));
-    // m_scenes.emplace_back(create_scene_assignment(m_width, m_height, m_depth));
+    m_scenes.emplace_back(create_scene_assignment(m_width, m_height, m_depth));
   }
 
   static std::unique_ptr <gl::scene> create_scene_none () {
@@ -685,6 +764,7 @@ namespace gl {
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
 
+    object->load();
     scene->add_object(std::move(object));
     
     return scene;
@@ -711,6 +791,7 @@ namespace gl {
       .rotate(90.f, {1, 0, 0})
       .translate({w_mid, h_mid, -d_mid});
 
+    object->load();
     scene->add_object(std::move(object));
     
     return scene;
@@ -737,6 +818,7 @@ namespace gl {
       .scale(glm::vec3(100.0f))
       .translate({w_mid, h_mid, -d_mid});
 
+    object->load();
     scene->add_object(std::move(object));
     
     return scene;
@@ -763,6 +845,7 @@ namespace gl {
       .translate({w_mid, h_mid, -d_mid})
       .set_blend(0.5f);
 
+    object->load();
     scene->add_object(std::move(object));
     
     return scene;
@@ -783,128 +866,141 @@ namespace gl {
 
     auto scene = std::make_unique <gl::scene> ("Planetary Gear", scene_properties());
 
-    auto object1 = load_blender_obj("../res/planetary-big.obj", "Big Gear", colors);
-    auto object21 = load_blender_obj("../res/planetary-medium.obj", "Medium Gear 1", colors);
-    auto object22 = load_blender_obj("../res/planetary-medium.obj", "Medium Gear 2", colors);
-    auto object23 = load_blender_obj("../res/planetary-medium.obj", "Medium Gear 3", colors);
-    auto object3 = load_blender_obj("../res/planetary-small.obj", "Small Gear", colors);
+    auto object = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear", colors);
 
-    for (auto i: object1->get_vertices())
-      std::cout << i.x << ' ' << i.y << '\n';
-
-    (*object1)
+    (*object)
       .scale(glm::vec3(2.0f))
       .rotate(90.0f, {1, 0, 0})
-      .translate({w_mid, h_mid, -d_mid});
-    (*object21)
-      .scale(glm::vec3(2.0f))
-      .rotate(90.0f, {1, 0, 0})
-      .translate({w_mid, h_mid, -d_mid});
-    (*object22)
-      .scale(glm::vec3(2.0f))
-      .rotate(90.0f, {1, 0, 0})
-      .translate({w_mid, h_mid, -d_mid});
-    (*object23)
-      .scale(glm::vec3(2.0f))
-      .rotate(90.0f, {1, 0, 0})
-      .translate({w_mid, h_mid, -d_mid});
-    (*object3)
-      .scale(glm::vec3(2.0f))
-      .rotate(90.0f, {1, 0, 0})
+      .set_rotation_angles(glm::vec3(0.2f))
       .translate({w_mid, h_mid, -d_mid});
 
-    scene->add_object(std::move(object1));
-    scene->add_object(std::move(object21));
-    scene->add_object(std::move(object22));
-    scene->add_object(std::move(object23));
-    scene->add_object(std::move(object3));
+    object->load();
+    scene->add_object(std::move(object));
     
     return scene;
   }
 
-  // static std::unique_ptr <gl::scene> create_scene_assignment (u32 width, u32 height, u32 depth) {
-  //   f32 w_mid = (f32)width / 2;
-  //   f32 h_mid = (f32)height / 2;
-  //   f32 d_mid = (f32)depth / 2;
+  static std::unique_ptr <gl::scene> create_scene_assignment (u32 width, u32 height, u32 depth) {
+    f32 w_mid = (f32)width / 2;
+    f32 h_mid = (f32)height / 2;
+    f32 d_mid = (f32)depth / 2;
     
-  //   const f32 sphere_radius = 200.0f;
-  //   const f32 velocity_factor = 500.0f;
+    const f32 sphere_radius = 200.0f;
+    const f32 velocity_factor = 100.0f;
 
-  //   static auto random_point_inside_sphere = [&] () -> glm::vec3 {
-  //     auto u = std::cbrt(rng(mt));
-  //     auto r = sphere_radius * u;
-  //     auto point = glm::vec3(rng(mt), rng(mt), rng(mt));
-  //     point = glm::normalize(point);
-  //     point *= r;
-  //     return point;
-  //   };
+    static auto random_point_inside_sphere = [&] () -> glm::vec3 {
+      auto u = std::cbrt(rng(mt));
+      auto r = sphere_radius * u;
+      auto point = glm::vec3(rng(mt), rng(mt), rng(mt));
+      point = glm::normalize(point);
+      point *= r;
+      return point;
+    };
 
-  //   static auto random_velocity = [&] () -> glm::vec3 {
-  //     auto velocity = glm::vec3(rng(mt), rng(mt), rng(mt));
-  //     velocity *= velocity_factor;
-  //     return velocity;
-  //   };
+    static auto random_velocity = [&] () -> glm::vec3 {
+      auto velocity = glm::vec3(rng(mt), rng(mt), rng(mt));
+      velocity *= velocity_factor;
+      return velocity;
+    };
 
-  //   auto scene = std::make_unique <gl::scene> (
-  //     "Assignment",
-  //     scene_properties(
-  //       w_mid - sphere_radius, w_mid + sphere_radius,
-  //       h_mid + sphere_radius, h_mid - sphere_radius,
-  //       d_mid + sphere_radius, d_mid - sphere_radius
-  //     )
-  //   );
+    static auto random_rotation_angles = [&] () -> glm::vec3 {
+      auto rotation = glm::vec3(rng(mt), rng(mt), rng(mt));
+      rotation += 1.0f;
+      rotation /= 4.0f;
+      return rotation;
+    };
 
-  //   auto object1 = load_blender_obj("../res/sphere.obj", "Sphere");
-  //   auto object2 = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle");
-  //   auto object3 = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear");
+    auto scene = std::make_unique <gl::scene> (
+      "Assignment",
+      scene_properties(
+        w_mid - sphere_radius, w_mid + sphere_radius,
+        h_mid + sphere_radius, h_mid - sphere_radius,
+        -d_mid + sphere_radius, -d_mid - sphere_radius
+      )
+    );
 
-  //   auto properties1 = gl::object_properties({0, 0, 0});
-  //   auto properties2 = gl::object_properties(random_velocity());
-  //   auto properties3 = gl::object_properties(random_velocity());
+    std::vector <glm::vec3> colors1;
+    std::vector <glm::vec3> colors2;
+    std::vector <glm::vec3> colors3;
 
-  //   (*object1)
-  //     .scale(glm::vec3(sphere_radius))
-  //     .translate({w_mid, h_mid, -d_mid});
+    colors1 = {
+      // {0.8f, 0.4f, 0.2f},
+      // {0.8f, 0.5f, 0.2f},
+      // {0.9f, 0.6f, 0.2f},
+      // {1.0f, 0.7f, 0.3f},
+      // {1.0f, 0.8f, 0.4f}
+      {1.0f, 1.0f, 1.0f}
+    };
 
-  //   (*object2)
-  //     .scale(glm::vec3(10.0f))
-  //     .translate(random_point_inside_sphere())
-  //     .translate({w_mid, h_mid, -d_mid});
+    for (i32 i = 0; i < 20; ++i) {
+      glm::vec3 color (200.0f - 2 * i, 200.0f - 2 * i, 210.0f + 2 * i);
+      color /= 256.0f;
+      colors2.push_back(color);
+    }
 
-  //   (*object3)
-  //     .scale(glm::vec3(0.5f))
-  //     .rotate(90.0f, {1, 0, 0})
-  //     .translate(random_point_inside_sphere())
-  //     .translate({w_mid, h_mid, -d_mid});
+    for (i32 i = 0; i < 20; ++i) {
+      glm::vec3 color (200.0f - i, 200.0f - i, 200.0f - i);
+      color /= 256.0f;
+      colors3.push_back(color);
+    }
 
-  //   scene->add_object(std::move(object1), properties1);
-  //   scene->add_object(std::move(object2), properties2);
-  //   scene->add_object(std::move(object3), properties3);
+    auto object1 = load_blender_obj("../res/sphere.obj", "Sphere", colors1);
+    auto object2 = load_blender_obj("../res/klein-bottle.obj", "Klein Bottle", colors2);
+    auto object3 = load_blender_obj("../res/planetary-gear.obj", "Planetary Gear", colors3);
+
+    (*object1)
+      .scale(glm::vec3(sphere_radius) + 100.0f)
+      .translate({w_mid, h_mid, -d_mid})
+      .set_rotation_angles(random_rotation_angles())
+      .set_blend(0.05f)
+      .load();
+
+    (*object2)
+      .scale(glm::vec3(15.0f))
+      .translate(random_point_inside_sphere())
+      .translate({w_mid, h_mid, -d_mid})
+      .set_velocity(random_velocity())
+      .set_rotation_angles(random_rotation_angles())
+      .set_blend(0.4f)
+      .load();
+
+    (*object3)
+      .scale(glm::vec3(0.5f))
+      .rotate(90.0f, {1, 0, 0})
+      .translate(random_point_inside_sphere())
+      .translate({w_mid, h_mid, -d_mid})
+      .set_velocity(random_velocity())
+      .set_rotation_angles(random_rotation_angles())
+      .load();
     
-  //   return scene;
-  // }
+    scene->add_object(std::move(object3));
+    scene->add_object(std::move(object2));
+    scene->add_object(std::move(object1));
+    
+    return scene;
+  }
+
+  glm::vec3 rotate_point (glm::vec3 center, glm::vec3 point, f32 angle) {
+    f32 s = glm::sin(angle);
+    f32 c = glm::cos(angle);
+
+    point.x -= center.x;
+    point.y -= center.y;
+
+    f32 xnew = point.x * c - point.y * s;
+    f32 ynew = point.x * s + point.y * c;
+
+    point.x = xnew + center.x;
+    point.y = ynew + center.y;
+
+    return point;
+  }
 
   void circle_generate (object& object, u32 points, u32 width, u32 height, u32 depth) {
     f32 w_mid = (f32)width / 2;
     f32 h_mid = (f32)height / 2;
     f32 d_mid = (f32)depth / 2;
     f32 angle = glm::radians(360.0f / points);
-
-    static auto rotate_point = [] (glm::vec3 center, glm::vec3 point, f32 angle) -> glm::vec3 {
-      f32 s = glm::sin(angle);
-      f32 c = glm::cos(angle);
-
-      point.x -= center.x;
-      point.y -= center.y;
-
-      f32 xnew = point.x * c - point.y * s;
-      f32 ynew = point.x * s + point.y * c;
-
-      point.x = xnew + center.x;
-      point.y = ynew + center.y;
-
-      return point;
-    };
 
     object.clear();
 
@@ -974,7 +1070,6 @@ namespace gl {
     }
 
     file.close();
-    object->load();
 
     return object;
   }
