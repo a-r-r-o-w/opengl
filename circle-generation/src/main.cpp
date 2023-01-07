@@ -167,8 +167,8 @@ int main () {
 
       {
         ImGui::Begin("Controls");
-        ImGui::SliderFloat("translation_x", &globals::translation.x, -1.0f, 1.0f);
-        ImGui::SliderFloat("translation_y", &globals::translation.y, -1.0f, 1.0f);
+        ImGui::SliderFloat("translation_x", &globals::translation.x, -globals::width / 2, globals::width / 2);
+        ImGui::SliderFloat("translation_y", &globals::translation.y, -globals::height / 2, globals::height / 2);
         ImGui::SliderInt("count", &n, 1, 100);
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
         ImGui::End();
