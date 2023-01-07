@@ -26,9 +26,38 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -g -DDEBUG
 # Release build compile flags
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -O3")
 
-include_directories(../.deps)
-include_directories(../.deps/imgui)
-include_directories(../.deps/imgui/backends/)
+include_directories(../deps/)
+include_directories(../deps/glad/include)
+include_directories(../deps/imgui/)
+include_directories(../deps/imgui/backends/)
+include_directories(src/include)
+
+add_library(
+  glad
+    ../deps/glad/src/glad.c
+)
+
+add_library(
+  glcore
+    ./src/include/vertex/index_buffer.cpp
+    ./src/include/vertex/vertex_array.cpp
+    ./src/include/vertex/vertex_buffer.cpp
+    ./src/include/vertex/vertex_buffer_layout.cpp
+    ./src/include/shader/shader.cpp
+    ./src/include/renderer.cpp
+)
+
+add_library (
+  imgui
+    ../deps/imgui/imgui.cpp
+    ../deps/imgui/imgui_demo.cpp
+    ../deps/imgui/imgui_draw.cpp
+    ../deps/imgui/imgui_tables.cpp
+    ../deps/imgui/imgui_widgets.cpp
+    ../deps/imgui/backends/imgui_impl_glfw.cpp
+    ../deps/imgui/backends/imgui_impl_opengl3.cpp
+)
+
 
 add_subdirectory(src)
 
